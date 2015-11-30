@@ -1,7 +1,4 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #include "rb.h"
 
 //a bit of non-systematic testing
@@ -26,14 +23,14 @@ void debug(rb_t *rb)
 void print_vectors(rb_t *rb)
 {
 	rb_data_t data[2];
-	rb_get_read_vector(rb,data);
+	rb_get_read_vectors(rb,data);
 	fprintf(stderr,"read vec size  %zu %zu =%zu  "
 		,data[0].size
 		,data[1].size
 		,data[0].size+data[1].size
 	);
 
-	rb_get_write_vector(rb,data);
+	rb_get_write_vectors(rb,data);
 	fprintf(stderr,"write vec size %zu %zu =%zu\n"
 		,data[0].size
 		,data[1].size
