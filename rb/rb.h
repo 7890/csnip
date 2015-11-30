@@ -71,16 +71,17 @@ extern "C" {
 #include <sys/types.h> //size_t
 
 /** @file rb.h \mainpage
- * A set of library functions to work with lock-free ringbuffers.
+ * A set of functions to work with lock-free ringbuffers.
  *
- * The key attribute of a ringbuffer is that it can be safely accessed
+ * The key attribute of this ringbuffer is that it can be safely accessed
  * by two threads simultaneously -- one reading from the buffer and
  * the other writing to it -- without using any synchronization or
  * mutual exclusion primitives.  For this to work correctly, there can
  * only be a single reader and a single writer thread.  Their
- * identities cannot be interchanged.
+ * identities cannot be interchanged, i.e. a reader can not become a
+ * writer and vice versa.
  *
- * Please find a documentation of functions here: \ref rb.h.
+ * Please find a documentation of all functions here: \ref rb.h.
  * 
  * rb.h is part of a collection of C snipets which can be found here: [https://github.com/7890/csnip](https://github.com/7890/csnip)
  */
@@ -660,8 +661,16 @@ size_t rb_peek_byte(const rb_t *rb, char *destination)
 }
 
 /**
-* n/a
-*/
+ * Peek one byte from the ringbuffer at the given offset (don't move the read pointer).
+ * This is a copying data reader.
+ *
+ * @param rb a pointer to the ringbuffer structure.
+ * @param destination a pointer to a variable where the byte read from the
+ * ringbuffer will go.
+ * @param offset read pointer offset
+ *
+ * @return the number of bytes read, which may range from 0 to 1.
+ */
 //=============================================================================
 size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset)
 {
@@ -884,7 +893,15 @@ void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec)
 }
 
 /**
-* n/a
+* This function is similar to rb_get_write_vectors().
+* Opposed to rb_get_write_vectors(), it will only return the first (next) vector
+* instead of an array of two vectors. The vector is returned to the caller by 
+* setting the rb_data_t variable provided by the caller.
+* If data was read using the provided pointer and size in rb_data_t, the read
+* pointer must be manually advanced using rb_advance_read_pointer().
+*
+* @param rb a pointer to the ringbuffer structure.
+* @param vec a pointer to a variable of type rb_data_t.
 */
 //=============================================================================
 void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec)
@@ -904,9 +921,16 @@ void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec)
 		vec->size=can_read_count;
 	}
 }
-
 /**
-* n/a
+* This function is similar to rb_get_read_vectors().
+* Opposed to rb_get_read_vectors(), it will only return the first (next) vector
+* instead of an array of two vectors. The vector is returned to the caller by 
+* setting the rb_data_t variable provided by the caller.
+* If data was written using the provided pointer and size in rb_data_t, the write
+* pointer must be manually advanced using rb_advance_write_pointer().
+*
+* @param rb a pointer to the ringbuffer structure.
+* @param vec a pointer to a variable of type rb_data_t.
 */
 //=============================================================================
 void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec)
@@ -977,7 +1001,7 @@ _not_found:
 //"ALIASES"
 
 /**
-* n/a
+* This is an alias to rb_advance_read_pointer().
 */
 size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_pointer(rb,count);}
 
