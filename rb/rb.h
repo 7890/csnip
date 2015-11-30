@@ -40,7 +40,15 @@
 // advance methods return count (limited to can_read/can_write)
 // new methods:
 // _drop: advance read pointer up to write pointer
+// _peek_at: peek at offset
 // _get_next_read_vector, _get_next_write_vector
+// _find_byte, _find_byte_sequence
+// _read_byte, _peek_byte, _peek_byte_at, _skip_byte, _write_byte
+// alias:
+// _skip -> _advance_read_pointer
+
+//EXPERIMENTAL CODE
+//NOT ALL METHODS FULLY TESTED
 
 #ifndef _RB_H
 #define _RB_H
@@ -74,26 +82,42 @@ typedef struct
   volatile size_t write_pointer;
   size_t size;
   int memory_locked;
-  volatile int last_was_write; //
+  volatile int last_was_write;
 } 
 rb_t ;
 
-rb_t *rb_new(size_t size); // _create
+rb_t *rb_new(size_t size);
 void rb_free(rb_t *rb);
 int rb_mlock(rb_t *rb);
 void rb_reset(rb_t *rb);
-size_t rb_can_read(const rb_t *rb); // _read_space
-size_t rb_can_write(const rb_t *rb); // _write_space
+
+size_t rb_can_read(const rb_t *rb);
+size_t rb_can_write(const rb_t *rb);
+
 size_t rb_read(rb_t *rb, char *destination, size_t count);
-size_t rb_peek(rb_t *rb, char *destination, size_t count);
-size_t rb_drop(rb_t *rb); //
 size_t rb_write(rb_t *rb, const char *source, size_t count);
-size_t rb_advance_read_pointer(rb_t *rb, size_t count); //_read_advance
-size_t rb_advance_write_pointer(rb_t *rb, size_t count); //_write_advance
+
+size_t rb_peek(const rb_t *rb, char *destination, size_t count);
+size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset);
+
+size_t rb_drop(rb_t *rb);
+
+int rb_find_byte(rb_t *rb, char byte, size_t *offset);
+int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset);
+
+size_t rb_read_byte(rb_t *rb, char *destination);
+size_t rb_peek_byte(const rb_t *rb, char *destination);
+size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset);
+size_t rb_skip_byte(rb_t *rb);
+size_t rb_write_byte(rb_t *rb, const char *source);
+
+size_t rb_advance_read_pointer(rb_t *rb, size_t count);
+size_t rb_advance_write_pointer(rb_t *rb, size_t count);
+
 void rb_get_read_vector(const rb_t *rb, rb_data_t *vec);
 void rb_get_write_vector(const rb_t *rb, rb_data_t *vec);
-void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec); //
-void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec); //
+void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec);
+void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec);
 
 /*
 rules in this ring:
@@ -174,6 +198,10 @@ rb_t *rb_new(size_t size)
 //=============================================================================
 void rb_free(rb_t *rb)
 {
+	if(rb==NULL)
+	{
+		return;
+	}
 #ifdef RB_USE_MLOCK
 	if(rb->memory_locked)
 	{
@@ -271,19 +299,14 @@ size_t rb_can_write(const rb_t *rb)
 //=============================================================================
 size_t rb_read(rb_t *rb, char *destination, size_t count)
 {
+	if(count==0){return 0;}
 	size_t can_read_count;
-	size_t do_read_count;
-	size_t linear_end;
+	//can not read more than offset, no chance to read from there
+	if(!(can_read_count=rb_can_read(rb))){return 0;}
+	size_t do_read_count=count>can_read_count ? can_read_count : count;
+	size_t linear_end=rb->read_pointer+do_read_count;
 	size_t copy_count_1;
 	size_t copy_count_2;
-
-	if(!(can_read_count=rb_can_read(rb)))
-	{
-		return 0;
-	}
-
-	do_read_count=count>can_read_count ? can_read_count : count;
-	linear_end=rb->read_pointer+do_read_count;
 
 	if(linear_end>rb->size)
 	{
@@ -300,7 +323,7 @@ size_t rb_read(rb_t *rb, char *destination, size_t count)
 
 	if(!copy_count_2)
 	{
-		rb->read_pointer=(rb->read_pointer+copy_count_1) % rb->size; ///////
+		rb->read_pointer=(rb->read_pointer+copy_count_1) % rb->size;
 	}
 	else
 	{
@@ -309,57 +332,6 @@ size_t rb_read(rb_t *rb, char *destination, size_t count)
 	}
 	rb->last_was_write=0;
 	return do_read_count;
-}
-
-// The copying data reader w/o read pointer advance. Copy at most 'count' bytes 
-// from 'rb' to 'destination'.  Returns the actual number of bytes copied.
-//=============================================================================
-size_t rb_peek(rb_t *rb, char *destination, size_t count)
-{
-	size_t can_read_count;
-	size_t do_read_count;
-	size_t linear_end;
-	size_t copy_count_1;
-	size_t copy_count_2;
-	size_t tmp_read_pointer;
-
-	tmp_read_pointer=rb->read_pointer;
-
-	if(!(can_read_count=rb_can_read(rb)))
-	{
-		return 0;
-	}
-
-	do_read_count=count>can_read_count ? can_read_count : count;
-	linear_end=tmp_read_pointer+do_read_count;
-
-	if(linear_end>rb->size)
-	{
-		copy_count_1=rb->size-tmp_read_pointer;
-		copy_count_2=linear_end-rb->size;
-	}
-	else
-	{
-		copy_count_1=do_read_count;
-		copy_count_2=0;
-	}
-
-	memcpy(destination, &(rb->buffer[tmp_read_pointer]), copy_count_1);
-
-	if(copy_count_2)
-	{
-		tmp_read_pointer=0;
-		memcpy(destination+copy_count_1, &(rb->buffer[tmp_read_pointer]), copy_count_2);
-	}
-	return do_read_count;
-}
-
-// Drop / ignore all data available to read. This moves the read pointer to the current
-// write pointer (nothing left to read).
-//=============================================================================
-size_t rb_drop(rb_t *rb)
-{
-	return rb_advance_read_pointer(rb,rb_can_read(rb));
 }
 
 // The copying data writer.  Copy at most 'count' bytes to 'rb' from 'source'. 
@@ -407,51 +379,166 @@ size_t rb_write(rb_t *rb, const char *source, size_t count)
 	return do_write_count;
 }
 
+//=============================================================================
+size_t rb_peek(const rb_t *rb, char *destination, size_t count)
+{
+	return rb_peek_at(rb,destination,count,0);
+}
+
+// The copying data reader w/o read pointer advance. Copy at most 'count' bytes 
+// from 'rb' to 'destination'.  Returns the actual number of bytes copied.
+//=============================================================================
+size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset)
+{
+	if(count==0){return 0;}
+	size_t can_read_count;
+	//can not read more than offset, no chance to read from there
+	if((can_read_count=rb_can_read(rb))<=offset){return 0;}
+	//limit read count respecting offset
+	size_t do_read_count=count>can_read_count-offset ? can_read_count-offset : count;
+	//adding the offset, knowing it could be beyond buffer end
+	size_t tmp_read_pointer=rb->read_pointer+offset;
+	//including all: current read pointer + offset + limited read count
+	size_t linear_end=tmp_read_pointer+do_read_count;
+	size_t copy_count_1;
+	size_t copy_count_2;
+
+	//beyond
+	if(linear_end>rb->size)
+	{
+		//still beyond
+		if(tmp_read_pointer>=rb->size)
+		{
+			//all in rolled over
+			tmp_read_pointer%=rb->size;
+			copy_count_1=do_read_count;
+			copy_count_2=0;
+		}
+		//segmented
+		else
+		{
+			copy_count_1=rb->size-tmp_read_pointer;
+			copy_count_2=linear_end-rb->size-offset;
+		}
+	}
+	else
+	//if not beyond the buffer end
+	{
+		copy_count_1=do_read_count;
+		copy_count_2=0;
+	}
+
+	memcpy(destination, &(rb->buffer[tmp_read_pointer]), copy_count_1);
+
+	if(copy_count_2)
+	{
+		memcpy(destination+copy_count_1, &(rb->buffer[0]), copy_count_2);
+	}
+	return do_read_count;
+}
+
+// Drop / ignore all data available to read. This moves the read pointer to the current
+// write pointer (nothing left to read).
+//=============================================================================
+size_t rb_drop(rb_t *rb)
+{
+	return rb_advance_read_pointer(rb,rb_can_read(rb));
+}
+
+//=============================================================================
+int rb_find_byte(rb_t *rb, char byte, size_t *offset)
+{
+	size_t off=0;
+	char c;
+	while(rb_peek_byte_at(rb,&c,off))
+	{
+		if(c==byte)
+		{
+			memcpy(offset,&(off),sizeof(size_t)); //hmmm.
+			return 1;
+		}
+		off++;
+	}
+	off=0;
+	memcpy(offset,&(off),sizeof(size_t));
+	return 0;
+}
+
+//=============================================================================
+size_t rb_read_byte(rb_t *rb, char *destination)
+{
+	return rb_read(rb,destination,1);
+}
+
+//=============================================================================
+size_t rb_peek_byte(const rb_t *rb, char *destination)
+{
+	return rb_peek_byte_at(rb,destination,0);
+}
+
+//=============================================================================
+size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset)
+{
+	size_t can_read_count;
+	if((can_read_count=rb_can_read(rb)<=offset)){return 0;}
+
+	size_t tmp_read_pointer=rb->read_pointer+offset;
+
+	if(rb->size<=tmp_read_pointer)
+	{
+		memcpy(destination, &(rb->buffer[tmp_read_pointer-rb->size]),1);
+	}
+	else
+	{
+		memcpy(destination, &(rb->buffer[tmp_read_pointer]),1);
+	}
+}
+
+//=============================================================================
+size_t rb_skip_byte(rb_t *rb)
+{
+	return rb_advance_read_pointer(rb,1);
+}
+
+//=============================================================================
+size_t rb_write_byte(rb_t *rb, const char *source)
+{
+	return rb_write(rb,source,1);
+}
+
 // Advance the read pointer by 'count' bytes. 'count' is limited to can_read().
 //=============================================================================
 size_t rb_advance_read_pointer(rb_t *rb, size_t count)
 {
-	size_t can_read_count=rb_can_read(rb);
+	if(count==0){return 0;}
+	size_t can_read_count;
+	if(!(can_read_count=rb_can_read(rb))){return 0;}
+
 	size_t do_advance_count=count>can_read_count ? can_read_count : count;
 	size_t r=rb->read_pointer;
 	size_t linear_end=r+do_advance_count;
-	size_t tmp_read_pointer;
+	size_t tmp_read_pointer=linear_end>rb->size ? linear_end-rb->size : r+do_advance_count;
 
-	if(linear_end>rb->size)
-	{
-		tmp_read_pointer=linear_end-rb->size;
-	}
-	else
-	{
-		tmp_read_pointer=r+do_advance_count;
-	}
-	tmp_read_pointer%=rb->size;
-	rb->read_pointer=tmp_read_pointer;
-	rb->last_was_write=0;
+	rb->read_pointer=(tmp_read_pointer%=rb->size);//
+	rb->last_was_write=0;//
 	return do_advance_count;
 }
 
-// Advance the write pointer by 'count' bytes.
+// Advance the write pointer by 'count' bytes. 'count' is limited to can_write().
 //=============================================================================
 size_t rb_advance_write_pointer(rb_t *rb, size_t count)
 {
-	size_t can_write_count=rb_can_write(rb);
+	if(count==0){return 0;}
+	size_t can_write_count;
+	if(!(can_write_count=rb_can_write(rb))){return 0;}
+
 	size_t do_advance_count=count>can_write_count ? can_write_count : count;
 	size_t w=rb->write_pointer;
 	size_t linear_end=w+do_advance_count;
-	size_t tmp_write_pointer;
+	size_t tmp_write_pointer=linear_end>rb->size ? linear_end-rb->size : w+do_advance_count;
 
-	if(linear_end>rb->size)
-	{
-		tmp_write_pointer=linear_end-rb->size;
-	}
-	else
-	{
-		tmp_write_pointer=w+do_advance_count;
-	}
-	tmp_write_pointer%=rb->size;
-	rb->write_pointer=tmp_write_pointer;
-	rb->last_was_write=1;
+	rb->write_pointer=(tmp_write_pointer%=rb->size);//
+	rb->last_was_write=1;//
 	return do_advance_count;
 }
 
@@ -546,9 +633,72 @@ void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec)
 	}
 }
 
+//=============================================================================
+int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset)
+{
+	char *tmp_pattern=pattern;
+	tmp_pattern+=pattern_offset;
+
+	char compare_buffer[count];
+
+	size_t off=0;
+	char c;
+	while(rb_peek_byte_at(rb,&c,off))
+	{
+		if(c==tmp_pattern[0])//found start
+		{
+			//read to compare buffer
+			if(rb_peek_at(rb,compare_buffer,count,off)==count)
+			{
+				if(!memcmp(tmp_pattern, compare_buffer,count))
+				{
+//					fprintf(stderr,"==MEMCMP MATCH\n");
+					memcpy(offset,&(off),sizeof(size_t)); //hmmm.
+					return 1;
+				}
+			}
+			else
+			{
+				goto _not_found;
+			}
+
+		}
+		off++;
+	}
+_not_found:
+	off=0;
+	memcpy(offset,&(off),sizeof(size_t));
+	return 0;
+}
+
+//=============================================================================
+//"ALIASES"
+size_t rb_skip(rb_t *rb, size_t count)	{return rb_advance_read_pointer(rb,count);}
+
+//#define ALIASES_1 1
+#ifdef ALIASES_1
+//if rb.h is used as a jack_ringbuffer replacement these wrappers simplify source modification
+//(sed 's/jack_ringbuffer_/rb_/g')
+rb_t *rb_create(size_t size)			{return rb_new(size);}
+size_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
+size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
+size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_pointer(rb,count);}
+size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_pointer(rb,count);}
+#endif
+
+//#define ALIASES_2 1
+#ifdef ALIASES_2
+//inspired by https://github.com/xant/libhl/blob/master/src/rbuf.c,
+//http://svn.drobilla.net/lad/trunk/raul/raul/RingBuffer.hpp
+size_t rb_size(rb_t *rb)		{return rb->size;}
+size_t rb_capacity(rb_t *rb)		{return rb->size;}
+void rb_clear(rb_t *rb)			{rb_reset(rb);}
+void rb_destroy(rb_t *rb)		{rb_free(rb);}
+#endif
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif //header guard
 //EOF
