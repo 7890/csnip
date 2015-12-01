@@ -710,6 +710,8 @@ size_t rb_skip_byte(rb_t *rb)
  * can be written to the ringbuffer's writable space.
  *
  * @param rb a pointer to the ringbuffer structure.
+ * @param source a pointer to the variable containing the byte to be written
+ * to the ringbuffer.
  *
  * @return the number of bytes written, which may range from 0 to 1.
  */
@@ -1001,7 +1003,7 @@ _not_found:
 //"ALIASES"
 
 /**
-* This is an alias to rb_advance_read_pointer().
+* \brief This is an alias to rb_advance_read_pointer().
 */
 size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_pointer(rb,count);}
 
