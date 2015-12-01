@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <unistd.h>
 #include <pthread.h>
 #include "rb.h"
 
@@ -122,8 +123,8 @@ static void *writer_thread_func(void *arg)
 	//srand(1234);
 
 	//example data buffer
-	char *buf="ringbuffers are cool. ";//\0";
-	size_t content_length=22;
+	const char *buf="ringbuffers are cool. ";
+	const size_t content_length=22;
 
 	//in one rb_write operation (reset each cylce)
 	size_t write=0;
