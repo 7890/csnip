@@ -71,7 +71,10 @@ extern "C" {
 #include <sys/types.h> //size_t
 
 /** @file rb.h \mainpage
- * A set of functions to work with lock-free ringbuffers.
+ * rb.h -- A set of functions to work with lock-free ringbuffers.
+ *
+ * \image html drawing_ringbuffer_1_path.svg "Ringbuffer"
+ * \image latex drawing_ringbuffer_1_path.eps "Ringbuffer"
  *
  * The key attribute of this ringbuffer is that it can be safely accessed
  * by two threads simultaneously -- one reading from the buffer and

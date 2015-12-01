@@ -13,10 +13,11 @@ doc:	rb.h doxyfile
 
 	which doxygen || (echo "doxygen not found." && exit 1)
 	doxygen ./doxyfile >/dev/null 2>&1 || (echo "html doc could not be created." && exit 1)
+	cp img/drawing_ringbuffer_1_path.svg doc/html
 
 	which pdflatex || (echo "pdflatex not found." && exit 1)
 	which makeindex || (echo "makeindex not found." && exit 1)
-
+	cp img/drawing_ringbuffer_1_path.eps doc/latex
 	cd doc/latex && make >/dev/null 2>&1 && mv refman.pdf $(PDF_DOC_NAME) || (echo "pdf doc could not be created." && exit 1)
 
 	@echo "==================================="
