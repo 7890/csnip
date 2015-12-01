@@ -9,7 +9,7 @@ rb:	rb.h rb_test0.c rb_test1.c rb_test2.c
 	$(CC) -o rb_test1 rb_test1.c
 	$(CC) -o rb_test2 rb_test2.c -lpthread
 
-doc:	rb.h doxyfile
+doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
 
 	which doxygen || (echo "doxygen not found." && exit 1)
 	doxygen ./doxyfile >/dev/null 2>&1 || (echo "html doc could not be created." && exit 1)
