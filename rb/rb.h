@@ -115,7 +115,7 @@ rb_t;
 /**
  * Read and write vectors are of type rb_data_t.
  * 
- * See rb_get_read_vector
+ * See rb_get_read_vector()
  *
  * Example use:
  * @code
