@@ -206,7 +206,9 @@ int main(int argc, char *argv[])
 
 	fprintf(stderr,"\n==creating new ringbuffer of size %d\n",rb_size_request);
 	
-	rb_=rb_new(rb_size_request);
+//	rb_=rb_new(rb_size_request);
+	rb_=rb_new_shared(rb_size_request);
+
 	if(rb_==NULL)
 	{
 		fprintf(stderr,"ringbuffer with size 0?\n");
@@ -220,6 +222,8 @@ int main(int argc, char *argv[])
 	{
 		usleep(100000);
 	}
+
+	//catch ctrl+c
 
 	//rb_free(rb);
 
