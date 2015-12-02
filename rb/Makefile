@@ -1,13 +1,15 @@
 CC ?= gcc
 PDF_DOC_NAME ?= "lock-free_ringbuffer_rb.h.pdf"
 
+CFLAGS ?= -lpthread -lrt -luuid
+
 default: rb
 
 rb:	rb.h rb_test0.c rb_test1.c rb_test2.c
 
-	$(CC) -o rb_test0 rb_test0.c
-	$(CC) -o rb_test1 rb_test1.c
-	$(CC) -o rb_test2 rb_test2.c -lpthread
+	$(CC) -o rb_test0 rb_test0.c $(CFLAGS)
+	$(CC) -o rb_test1 rb_test1.c $(CFLAGS)
+	$(CC) -o rb_test2 rb_test2.c $(CFLAGS)
 
 doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
 

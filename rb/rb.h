@@ -60,15 +60,46 @@ _skip -> _advance_read_pointer
 extern "C" {
 #endif
 
-#define RB_USE_MLOCK 	/**< If defined, use POSIX memory locking. This flag is set by default.
-			     You'd need to tweak the rb.h source file in order to disable the use of mlock() or make it a compile-time setting. */
+#define RB_USE_MLOCK	/**< If defined (without value), add POSIX memory locking (see rb_mlock(), rb_munlock()). This flag is set by default.
+			     Modify rb.h source file in order to disable the use of the system calls mlock(), munlock(). */
+
+#define RB_PROVIDE_LOCKS/**< If defined (without value), add read and write mutex locks. This flag is set by default.
+			     Modify rb.h source file in order to disable the use of the phtread library.
+			     Programs that include "rb.h" with RB_PROVIDE_LOCKS defined need to link with '-lphtread'.
+			     Enabling this doesn't mean read and write operations are locked by default.
+			     A caller can use these methods to wrap read and write operations:
+			     See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write(). */
+
+
+#define RB_ENABLE_SHM	/**< If defined (without value), add shared memory support. This flag is set by default.
+			     Modify rb.h source file in order to disable the use of shared memory (normally found under '/dev/shm/').
+			     Programs that include "rb.h" need to link with '-lrt -luuid'.
+			     See also rb_new_shared(). */
+
+#define RB_DEFAULT_USE_SHM 0	/**< This option takes a value. It is only relevant if RB_ENABLE_SHM is defined.
+				     If set to 0: rb_new() will use malloc(), in private heap storage.
+				     If set to 1: rb_new() will implicitely use shared memory backed storage.
+				     See also rb_new_shared().
+				   */
 
 #include <stdlib.h> //malloc, free
 #include <string.h> //memcpy
+#include <sys/types.h> //size_t
+#include <stdio.h> //fprintf
 #ifdef RB_USE_MLOCK
 	#include <sys/mman.h> //mlock, munlock
 #endif
-#include <sys/types.h> //size_t
+#ifdef RB_PROVIDE_LOCKS
+	#include <pthread.h> //pthread_mutex_init, pthread_mutex_lock ..
+#endif
+#ifdef RB_ENABLE_SHM
+	#include <sys/mman.h> //mmap
+	#include <unistd.h> //ftruncate
+	#include <fcntl.h> //constants O_CREAT, ..
+	#include <sys/stat.h> //
+	#include <sys/shm.h> //shm_open, shm_unlink, mmap
+	#include <uuid/uuid.h> //uuid_generate_time_safe
+#endif
 
 /** @file rb.h \mainpage
  * rb.h -- A set of functions to work with lock-free ringbuffers.
@@ -106,10 +137,21 @@ typedef struct
   size_t size;				/**< \brief The size in bytes of the buffer as requested by caller. */
   volatile size_t read_pointer;		/**< \brief A pointer to the buffer for read operations. */
   volatile size_t write_pointer;	/**< \brief A pointer to the buffer for write operations. */
-  int memory_locked;			/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
   volatile int last_was_write;		/**< \brief Whether or not the last operation on the buffer was of type write (write pointer advanced).
 					            !last_was_write corresponds to read operation accordingly (read pinter advanced). */
-} 
+  int memory_locked;			/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
+  int in_shared_memory;
+
+#ifdef RB_ENABLE_SHM
+  char memname_struct[256];
+  char memname_buffer[256];
+#endif
+
+#ifdef RB_PROVIDE_LOCKS
+  pthread_mutex_t read_lock;
+  pthread_mutex_t write_lock;
+#endif
+}
 rb_t;
 
 /**
@@ -133,38 +175,48 @@ typedef struct
 } 
 rb_data_t;
 
-rb_t *rb_new(size_t size);
-void rb_free(rb_t *rb);
-int rb_mlock(rb_t *rb);
-void rb_reset(rb_t *rb);
+static inline rb_t *rb_new(size_t size);
+static inline rb_t *rb_new_shared(size_t size);
 
-size_t rb_can_read(const rb_t *rb);
-size_t rb_can_write(const rb_t *rb);
+static inline void rb_free(rb_t *rb);
+static inline int rb_mlock(rb_t *rb);
+static inline void rb_reset(rb_t *rb);
 
-size_t rb_read(rb_t *rb, char *destination, size_t count);
-size_t rb_write(rb_t *rb, const char *source, size_t count);
+static inline size_t rb_can_read(const rb_t *rb);
+static inline size_t rb_can_write(const rb_t *rb);
 
-size_t rb_peek(const rb_t *rb, char *destination, size_t count);
-size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset);
+static inline size_t rb_read(rb_t *rb, char *destination, size_t count);
+static inline size_t rb_write(rb_t *rb, const char *source, size_t count);
 
-size_t rb_drop(rb_t *rb);
+static inline size_t rb_peek(const rb_t *rb, char *destination, size_t count);
+static inline size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset);
 
-int rb_find_byte(rb_t *rb, char byte, size_t *offset);
-int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset);
+static inline size_t rb_drop(rb_t *rb);
 
-size_t rb_read_byte(rb_t *rb, char *destination);
-size_t rb_peek_byte(const rb_t *rb, char *destination);
-size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset);
-size_t rb_skip_byte(rb_t *rb);
-size_t rb_write_byte(rb_t *rb, const char *source);
+static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset);
+static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset);
 
-size_t rb_advance_read_pointer(rb_t *rb, size_t count);
-size_t rb_advance_write_pointer(rb_t *rb, size_t count);
+static inline size_t rb_read_byte(rb_t *rb, char *destination);
+static inline size_t rb_peek_byte(const rb_t *rb, char *destination);
+static inline size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset);
+static inline size_t rb_skip_byte(rb_t *rb);
+static inline size_t rb_write_byte(rb_t *rb, const char *source);
 
-void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec);
-void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec);
-void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec);
-void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec);
+static inline size_t rb_advance_read_pointer(rb_t *rb, size_t count);
+static inline size_t rb_advance_write_pointer(rb_t *rb, size_t count);
+
+static inline void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec);
+static inline void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec);
+static inline void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec);
+static inline void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec);
+
+//if either multiple readers or writers are involved, some kind of
+//locks can't possibly be circumvented
+static inline int rb_try_exclusive_read(rb_t *rb);
+static inline void rb_release_read(rb_t *rb);
+static inline int rb_try_exclusive_write(rb_t *rb);
+static inline void rb_release_write(rb_t *rb);
+
 
 /*
 rules in this ring:
@@ -252,30 +304,114 @@ thread safety:
  * otherwise.
  */
 //=============================================================================
-rb_t *rb_new(size_t size)
+static inline rb_t *rb_new(size_t size)
 {
+#ifdef RB_ENABLE_SHM
+	if(RB_DEFAULT_USE_SHM==1)
+	{
+		return rb_new_shared(size);
+	}
+#endif
+
 	if(size<1) {return NULL;}
 
 	rb_t *rb;
-	
 	rb=(rb_t*)malloc(sizeof(rb_t)); //
 	if(rb==NULL) {return NULL;}
-
-	rb->size=size;
-	rb->write_pointer=0;
-	rb->read_pointer=0;
-
-	rb->buffer=(char*)malloc(rb->size); //
+	rb->buffer=(char*)malloc(size); //
 	if(rb->buffer==NULL)
 	{
 		free(rb);
 		return NULL;
 	}
-	rb->memory_locked=0;
-	rb->last_was_write=0;	
 
+	rb->size=size;
+	rb->write_pointer=0;
+	rb->read_pointer=0;
+	rb->last_was_write=0;	
+	rb->memory_locked=0;
+	rb->in_shared_memory=0;
+
+#ifdef RB_PROVIDE_LOCKS
+	pthread_mutex_init ( &rb->read_lock, NULL);
+	pthread_mutex_init ( &rb->write_lock, NULL);
+#endif
 	return rb;
 }
+
+/**
+* n/a
+*/
+#ifdef RB_ENABLE_SHM
+//=============================================================================
+static inline rb_t *rb_new_shared(size_t size)
+{
+#ifndef RB_ENABLE_SHM
+	return NULL;
+#endif
+	if(size<1) {return NULL;}
+
+	rb_t *rb;
+
+	//create rb_t in shared memory
+	uuid_t uuid;
+	uuid_generate_time_safe(uuid);
+	char memname_struct[37]; //i.e. "b6310884-9938-11e5-bf8c-74d435e313ae" + "\0"
+	uuid_unparse_lower(uuid, memname_struct);
+
+	//O_TRUNC |
+	int fd=shm_open(memname_struct,O_CREAT | O_RDWR, 0666);
+	if(fd<0) {return NULL;}
+
+	int r=ftruncate(fd,sizeof(rb_t));
+	if(r!=0) {return NULL;}
+
+	//void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+	rb=(rb_t*)mmap(0, sizeof(rb_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	close(fd);
+
+	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
+
+	memcpy(rb->memname_struct,memname_struct,37);
+	fprintf(stderr,"rb->memname_struct: %s\n",rb->memname_struct);
+
+	//create rb_t->buffer in shared memory
+	uuid_generate_time_safe(uuid);
+	char memname_buffer[37];
+	uuid_unparse_lower(uuid, memname_buffer);
+
+	fd=shm_open(memname_buffer,O_CREAT | O_RDWR, 0666);
+	if(fd<0) {return NULL;}
+
+	r=ftruncate(fd,size);
+	if(r!=0) {return NULL;}
+
+	rb->buffer=(char*)mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	close(fd);
+
+	if(rb->buffer==NULL || rb->buffer==MAP_FAILED)
+	{
+		shm_unlink(memname_struct);
+		return NULL;
+	}
+
+	memcpy(rb->memname_buffer,memname_buffer,37);
+	fprintf(stderr,"rb->memname_buffer: %s\n",rb->memname_buffer);
+
+	rb->size=size;
+	rb->write_pointer=0;
+	rb->read_pointer=0;
+	rb->last_was_write=0;	
+	rb->memory_locked=0;
+	rb->in_shared_memory=1;
+
+#ifdef RB_PROVIDE_LOCKS
+	pthread_mutex_init ( &rb->read_lock, NULL);
+	pthread_mutex_init ( &rb->write_lock, NULL);
+#endif
+	return rb;
+}
+#endif
 
 /**
  * Frees the ringbuffer data structure allocated by an earlier call to rb_new().
@@ -285,16 +421,33 @@ rb_t *rb_new(size_t size)
  * @param rb a pointer to the ringbuffer structure.
  */
 //=============================================================================
-void rb_free(rb_t *rb)
+static inline void rb_free(rb_t *rb)
 {
 	if(rb==NULL) {return;}
+
 #ifdef RB_USE_MLOCK
 	if(rb->memory_locked)
 	{
 		munlock(rb->buffer, rb->size);
 	}
 #endif
+
 	rb->size=0;
+
+#ifdef RB_ENABLE_SHM
+	if(rb->in_shared_memory)
+	{
+		shm_unlink(rb->memname_buffer);
+		shm_unlink(rb->memname_struct);
+		return;
+	}
+	else
+	{
+		goto _not_in_shared;
+	}
+#endif
+
+_not_in_shared:
 	free(rb->buffer);
 	free(rb);
 }
@@ -307,15 +460,19 @@ void rb_free(rb_t *rb)
  * This is not a realtime operation.
  *
  * @param rb a pointer to the ringbuffer structure.
+ *
+ * @return success: lock==1, no lock==0
  */
 //=============================================================================
-int rb_mlock(rb_t *rb)
+static inline int rb_mlock(rb_t *rb)
 {
 #ifdef RB_USE_MLOCK
-	if(mlock(rb->buffer, rb->size)) {return -1;}
-#endif
+	if(mlock(rb->buffer, rb->size)) {return 0;}
 	rb->memory_locked=1;
+	return 1;
+#else
 	return 0;
+#endif
 }
 
 /**
@@ -326,7 +483,7 @@ int rb_mlock(rb_t *rb)
  * @param rb a pointer to the ringbuffer structure.
  */
 //=============================================================================
-void rb_reset(rb_t *rb)
+static inline void rb_reset(rb_t *rb)
 {
 	rb->read_pointer=0;
 	rb->write_pointer=0;
@@ -344,7 +501,7 @@ void rb_reset(rb_t *rb)
  * @return the number of bytes available to read.
  */
 //=============================================================================
-size_t rb_can_read(const rb_t *rb)
+static inline size_t rb_can_read(const rb_t *rb)
 {
 	size_t r=rb->read_pointer;
 	size_t w=rb->write_pointer;
@@ -368,7 +525,7 @@ size_t rb_can_read(const rb_t *rb)
  * @return the amount of free space (in bytes) available for writing.
  */
 //=============================================================================
-size_t rb_can_write(const rb_t *rb)
+static inline size_t rb_can_write(const rb_t *rb)
 {
 	size_t r=rb->read_pointer;
 	size_t w=rb->write_pointer;
@@ -397,7 +554,7 @@ size_t rb_can_write(const rb_t *rb)
  * @return the number of bytes read, which may range from 0 to count.
  */
 //=============================================================================
-size_t rb_read(rb_t *rb, char *destination, size_t count)
+static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
 {
 	if(count==0) {return 0;}
 	size_t can_read_count;
@@ -448,7 +605,7 @@ size_t rb_read(rb_t *rb, char *destination, size_t count)
  * @return the number of bytes written, which may range from 0 to count
  */
 //=============================================================================
-size_t rb_write(rb_t *rb, const char *source, size_t count)
+static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
 {
 	size_t can_write_count;
 	size_t do_write_count;
@@ -509,7 +666,7 @@ size_t rb_write(rb_t *rb, const char *source, size_t count)
  * @return the number of bytes read, which may range from 0 to count.
  */
 //=============================================================================
-size_t rb_peek(const rb_t *rb, char *destination, size_t count)
+static inline size_t rb_peek(const rb_t *rb, char *destination, size_t count)
 {
 	return rb_peek_at(rb,destination,count,0);
 }
@@ -534,7 +691,7 @@ size_t rb_peek(const rb_t *rb, char *destination, size_t count)
  * @return the number of bytes read, which may range from 0 to count.
  */
 //=============================================================================
-size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset)
+static inline size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset)
 {
 	if(count==0) {return 0;}
 	size_t can_read_count;
@@ -593,7 +750,7 @@ size_t rb_peek_at(const rb_t *rb, char *destination, size_t count, size_t offset
  * @return the number of bytes dropped, which may range from 0 to rb->size.
  */
 //=============================================================================
-size_t rb_drop(rb_t *rb)
+static inline size_t rb_drop(rb_t *rb)
 {
 	return rb_advance_read_pointer(rb,rb_can_read(rb));
 }
@@ -611,7 +768,7 @@ size_t rb_drop(rb_t *rb)
  * @return success: found==1, not found==0
  */
 //=============================================================================
-int rb_find_byte(rb_t *rb, char byte, size_t *offset)
+static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset)
 {
 	size_t off=0;
 	char c;
@@ -643,7 +800,7 @@ int rb_find_byte(rb_t *rb, char byte, size_t *offset)
  * @return the number of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
-size_t rb_read_byte(rb_t *rb, char *destination)
+static inline size_t rb_read_byte(rb_t *rb, char *destination)
 {
 	return rb_read(rb,destination,1);
 }
@@ -658,7 +815,7 @@ size_t rb_read_byte(rb_t *rb, char *destination)
  * @return the number of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
-size_t rb_peek_byte(const rb_t *rb, char *destination)
+static inline size_t rb_peek_byte(const rb_t *rb, char *destination)
 {
 	return rb_peek_byte_at(rb,destination,0);
 }
@@ -675,7 +832,7 @@ size_t rb_peek_byte(const rb_t *rb, char *destination)
  * @return the number of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
-size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset)
+static inline size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset)
 {
 	size_t can_read_count;
 	if((can_read_count=rb_can_read(rb)<=offset)) {return 0;}
@@ -702,7 +859,7 @@ size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t offset)
  * @return the number of bytes skipped, which may range from 0 to 1.
  */
 //=============================================================================
-size_t rb_skip_byte(rb_t *rb)
+static inline size_t rb_skip_byte(rb_t *rb)
 {
 	return rb_advance_read_pointer(rb,1);
 }
@@ -719,7 +876,7 @@ size_t rb_skip_byte(rb_t *rb)
  * @return the number of bytes written, which may range from 0 to 1.
  */
 //=============================================================================
-size_t rb_write_byte(rb_t *rb, const char *source)
+static inline size_t rb_write_byte(rb_t *rb, const char *source)
 {
 	return rb_write(rb,source,1);
 }
@@ -744,7 +901,7 @@ size_t rb_write_byte(rb_t *rb, const char *source)
  * @return the number of bytes advanced, which may range from 0 to count.
  */
 //=============================================================================
-size_t rb_advance_read_pointer(rb_t *rb, size_t count)
+static inline size_t rb_advance_read_pointer(rb_t *rb, size_t count)
 {
 	if(count==0) {return 0;}
 	size_t can_read_count;
@@ -780,7 +937,7 @@ size_t rb_advance_read_pointer(rb_t *rb, size_t count)
  * @return the number of bytes advanced, which may range from 0 to count
  */
 //=============================================================================
-size_t rb_advance_write_pointer(rb_t *rb, size_t count)
+static inline size_t rb_advance_write_pointer(rb_t *rb, size_t count)
 {
 	if(count==0) {return 0;}
 	size_t can_write_count;
@@ -823,7 +980,7 @@ size_t rb_advance_write_pointer(rb_t *rb, size_t count)
  *
  */
 //=============================================================================
-void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec)
 {
 	size_t can_read_count=rb_can_read(rb);
 	size_t r=rb->read_pointer;
@@ -873,7 +1030,7 @@ void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec)
  * @param vec a pointer to a 2 element array of rb_data_t.
  */
 //=============================================================================
-void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec)
 {
 	size_t can_write_count=rb_can_write(rb);
 	size_t w=rb->write_pointer;
@@ -909,7 +1066,7 @@ void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec)
 * @param vec a pointer to a variable of type rb_data_t.
 */
 //=============================================================================
-void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec)
 {
 	size_t can_read_count=rb_can_read(rb);
 	size_t r=rb->read_pointer;
@@ -938,7 +1095,7 @@ void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec)
 * @param vec a pointer to a variable of type rb_data_t.
 */
 //=============================================================================
-void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec)
 {
 	size_t can_write_count=rb_can_write(rb);
 	size_t w=rb->write_pointer;
@@ -971,7 +1128,7 @@ void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec)
  * @return success: found==1, not found==0
  */
 //=============================================================================
-int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset)
+static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset)
 {
 	char *tmp_pattern=pattern;
 	tmp_pattern+=pattern_offset;
@@ -1002,35 +1159,86 @@ _not_found:
 	return 0;
 }
 
+/**
+* n/a
+*/
+//=============================================================================
+static inline int rb_try_exclusive_read(rb_t *rb)
+{
+#ifdef RB_PROVIDE_LOCKS
+	if(pthread_mutex_trylock(&rb->read_lock)) {return 0;}
+	else {return 1;}
+#else
+	return 0;
+#endif
+}
+
+/**
+* n/a
+*/
+//=============================================================================
+static inline void rb_release_read(rb_t *rb)
+{
+#ifdef RB_PROVIDE_LOCKS
+	pthread_mutex_unlock(&rb->read_lock);
+#endif
+}
+
+/**
+* n/a
+*/
+//=============================================================================
+static inline int rb_try_exclusive_write(rb_t *rb)
+{
+#ifdef RB_PROVIDE_LOCKS
+	if(pthread_mutex_trylock(&rb->write_lock)) {return 0;}
+	else {return 1;}
+#else
+	return 0;
+#endif
+}
+
+/**
+* n/a
+*/
+//=============================================================================
+static inline void rb_release_write(rb_t *rb)
+{
+#ifdef RB_PROVIDE_LOCKS
+
+	pthread_mutex_unlock(&rb->write_lock);
+#endif
+}
+
 //=============================================================================
 //"ALIASES"
 
 /**
 * \brief This is an alias to rb_advance_read_pointer().
 */
-size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_pointer(rb,count);}
+static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_pointer(rb,count);}
 
 //#define ALIASES_1
 #ifdef ALIASES_1
 //if rb.h is used as a jack_ringbuffer replacement these wrappers simplify source modification
 //(sed 's/jack_ringbuffer_/rb_/g')
-rb_t *rb_create(size_t size)			{return rb_new(size);}
-size_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
-size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
-size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_pointer(rb,count);}
-size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_pointer(rb,count);}
-void rb_get_read_vector(const rb_t *rb, rb_data_t *vec) {return rb_get_read_vectors(rb, vec);}
-void rb_get_write_vector(const rb_t *rb, rb_data_t *vec) {return rb_get_read_vectors(rb, vec);}
+static inline rb_t *rb_create(size_t size)			{return rb_new(size);}
+static inline size_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
+static inline size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
+static inline size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_pointer(rb,count);}
+static inline size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_pointer(rb,count);}
+static inline void rb_get_read_vector(const rb_t *rb, rb_data_t *vec) {return rb_get_read_vectors(rb, vec);}
+static inline void rb_get_write_vector(const rb_t *rb, rb_data_t *vec) {return rb_get_read_vectors(rb, vec);}
 #endif
 
 //#define ALIASES_2
 #ifdef ALIASES_2
 //inspired by https://github.com/xant/libhl/blob/master/src/rbuf.c,
 //http://svn.drobilla.net/lad/trunk/raul/raul/RingBuffer.hpp
-size_t rb_size(rb_t *rb)		{return rb->size;}
-size_t rb_capacity(rb_t *rb)		{return rb->size;}
-void rb_clear(rb_t *rb)			{rb_reset(rb);}
-void rb_destroy(rb_t *rb)		{rb_free(rb);}
+static inline size_t rb_size(rb_t *rb)		{return rb->size;}
+static inline size_t rb_capacity(rb_t *rb)		{return rb->size;}
+static inline void rb_clear(rb_t *rb)			{rb_reset(rb);}
+static inline void rb_destroy(rb_t *rb)		{rb_free(rb);}
 #endif
 
 #ifdef __cplusplus
