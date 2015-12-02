@@ -373,7 +373,7 @@ static inline rb_t *rb_new_shared(size_t size)
 	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
 
 	memcpy(rb->memname_struct,memname_struct,37);
-	fprintf(stderr,"rb->memname_struct: %s\n",rb->memname_struct);
+//	fprintf(stderr,"rb->memname_struct: %s\n",rb->memname_struct);
 
 	//create rb_t->buffer in shared memory
 	uuid_generate_time_safe(uuid);
@@ -396,7 +396,7 @@ static inline rb_t *rb_new_shared(size_t size)
 	}
 
 	memcpy(rb->memname_buffer,memname_buffer,37);
-	fprintf(stderr,"rb->memname_buffer: %s\n",rb->memname_buffer);
+//	fprintf(stderr,"rb->memname_buffer: %s\n",rb->memname_buffer);
 
 	rb->size=size;
 	rb->write_pointer=0;
