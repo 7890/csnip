@@ -34,4 +34,6 @@ clean:
 	-rm -f rb_test0
 	-rm -f rb_test1
 	-rm -f rb_test2
+	-rm -f rb_shared_reader
+	-rm -f rb_shared_writer
 	-rm -rf doc
