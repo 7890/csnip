@@ -44,7 +44,7 @@ advance methods return count (limited to can_read/can_write)
 new methods:
 _drop: advance read index up to write index
 _peek_at: peek at offset
-_munloack
+_munlock
 _get_next_read_region, _get_next_write_region
 _find_byte, _find_byte_sequence
 _read_byte, _peek_byte, _peek_byte_at, _skip_byte, _write_byte
@@ -1438,7 +1438,7 @@ static inline size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
 static inline size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_index(rb,count);}
 static inline size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_index(rb,count);}
 static inline void rb_get_read_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_read_regions(rb,regions);}
-static inline void rb_get_write_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_read_regions(rb,regions);}
+static inline void rb_get_write_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_write_regions(rb,regions);}
 #endif
 
 //#define ALIASES_2
