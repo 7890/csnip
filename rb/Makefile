@@ -11,6 +11,9 @@ rb:	rb.h rb_test0.c rb_test1.c rb_test2.c
 	$(CC) -o rb_test1 rb_test1.c $(CFLAGS)
 	$(CC) -o rb_test2 rb_test2.c $(CFLAGS)
 
+	$(CC) -o rb_shared_writer rb_shared_writer.c $(CFLAGS)
+	$(CC) -o rb_shared_reader rb_shared_reader.c $(CFLAGS)
+
 doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
 
 	which doxygen || (echo "doxygen not found." && exit 1)

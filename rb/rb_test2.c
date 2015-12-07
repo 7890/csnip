@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
 #include "rb.h"
@@ -28,29 +27,10 @@ void debug(rb_t *rb, int from_thread)
 	}
 	fprintf(stderr,"can read  %zu @ %zu  can write %zu @ %zu   %s\n"
 		,rb_can_read(rb)
-		,rb->read_pointer
+		,rb->read_index
 		,rb_can_write(rb)
-		,rb->write_pointer
+		,rb->write_index
 		,(from_thread==READER_THREAD ? "reader" : "writer")
-	);
-}
-
-//=============================================================================
-void print_vectors(rb_t *rb)
-{
-	rb_data_t data[2];
-	rb_get_read_vectors(rb,data);
-	fprintf(stderr,"read vec size  %zu %zu =%zu  "
-		,data[0].size
-		,data[1].size
-		,data[0].size+data[1].size
-	);
-
-	rb_get_write_vectors(rb,data);
-	fprintf(stderr,"write vec size %zu %zu =%zu\n"
-		,data[0].size
-		,data[1].size
-		,data[0].size+data[1].size
 	);
 }
 

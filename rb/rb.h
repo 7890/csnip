@@ -35,19 +35,21 @@ allow arbitrary sized ringbuffers
 	if buffer size=n: _can_write==n after creation
 methods and types renamed:
 jack_ringbuffer_* -> rb_*
+_data_t -> region_t
 _create -> _new
 _read_space -> _can_read, _write_space -> _can_write
-_get_read_vector -> _get_read_vectors, _get_write_vector -> _get_write_vectors
-_read_advance -> _advance_read_pointer, _write_advance -> _advance_write_pointer
+_get_read_vector -> _get_read_regions, _get_write_vectors -> _get_write_regions
+_read_advance -> _advance_read_index, _write_advance -> _advance_write_index
 advance methods return count (limited to can_read/can_write)
 new methods:
-_drop: advance read pointer up to write pointer
+_drop: advance read index up to write index
 _peek_at: peek at offset
-_get_next_read_vector, _get_next_write_vector
+_munloack
+_get_next_read_region, _get_next_write_region
 _find_byte, _find_byte_sequence
 _read_byte, _peek_byte, _peek_byte_at, _skip_byte, _write_byte
 alias:
-_skip -> _advance_read_pointer
+_skip -> _advance_read_index
 */
 
 //EXPERIMENTAL CODE
@@ -60,27 +62,27 @@ _skip -> _advance_read_pointer
 extern "C" {
 #endif
 
-#define RB_USE_MLOCK	/**< If defined (without value), add POSIX memory locking (see rb_mlock(), rb_munlock()). This flag is set by default.
+#define RB_USE_MLOCK	/**< If defined (without value), provide POSIX memory locking (see rb_mlock(), rb_munlock()). This flag is set by default.
 			     Modify rb.h source file in order to disable the use of the system calls mlock(), munlock(). */
 
-#define RB_PROVIDE_LOCKS/**< If defined (without value), add read and write mutex locks. This flag is set by default.
+#define RB_PROVIDE_LOCKS/**< If defined (without value), provide read and write mutex locks. This flag is set by default.
 			     Modify rb.h source file in order to disable the use of the phtread library.
 			     Programs that include "rb.h" with RB_PROVIDE_LOCKS defined need to link with '-lphtread'.
 			     Enabling this doesn't mean read and write operations are locked by default.
 			     A caller can use these methods to wrap read and write operations:
 			     See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write(). */
 
-
-#define RB_ENABLE_SHM	/**< If defined (without value), add shared memory support. This flag is set by default.
+#define RB_ENABLE_SHM	/**< If defined (without value), provide shared memory support. This flag is set by default.
 			     Modify rb.h source file in order to disable the use of shared memory (normally found under '/dev/shm/').
 			     Programs that include "rb.h" need to link with '-lrt -luuid'.
 			     See also rb_new_shared(). */
 
-#define RB_DEFAULT_USE_SHM 0	/**< This option takes a value. It is only relevant if RB_ENABLE_SHM is defined.
-				     If set to 0: rb_new() will use malloc(), in private heap storage.
-				     If set to 1: rb_new() will implicitely use shared memory backed storage.
-				     See also rb_new_shared().
-				   */
+#ifndef RB_DEFAULT_USE_SHM
+	#define RB_DEFAULT_USE_SHM -1	/**< This option takes a value. It is only relevant if RB_ENABLE_SHM is defined.
+					     If set to -1: rb_new() will use malloc(), in private heap storage.
+					     If set to any other value or none: rb_new() will implicitely use shared memory backed storage.
+					     See also rb_new_shared(). */
+#endif
 
 #include <stdlib.h> //malloc, free
 #include <string.h> //memcpy
@@ -123,6 +125,12 @@ extern "C" {
 /**
  * Ringbuffers are of type rb_t.
  * 
+ * The members of an rb_t struct must normally not be changed directly by a user of rb.h.
+ * However it can be done, this is an open system. Not using the rb_* functions to operate
+ * on rb_t will produce arbitrary results.
+ *
+ * It is safe to read the struct members at any time without changing them, i.e. ->size.
+ * 
  * Example use:
  * @code
  * rb_t *ringbuffer;
@@ -132,39 +140,39 @@ extern "C" {
  */
 typedef struct
 {
-  char *buffer;				/**< \brief Pointer to the linear flat byte buffer to hold all ringbuffer data.
-					            The memory for the buffer will be allocated when rb_new() is called. */
-  size_t size;				/**< \brief The size in bytes of the buffer as requested by caller. */
-  volatile size_t read_pointer;		/**< \brief A pointer to the buffer for read operations. */
-  volatile size_t write_pointer;	/**< \brief A pointer to the buffer for write operations. */
-  volatile int last_was_write;		/**< \brief Whether or not the last operation on the buffer was of type write (write pointer advanced).
-					            !last_was_write corresponds to read operation accordingly (read pinter advanced). */
-  int memory_locked;			/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
-  int in_shared_memory;
+  size_t size;			/**< \brief The size in bytes of the buffer as requested by caller. */
+  volatile size_t read_index;	/**< \brief Absolute position (index) in the buffer for read operations. */
+  volatile size_t write_index;	/**< \brief Abolute position (index) in the buffer for write operations. */
+  volatile int last_was_write;	/**< \brief Whether or not the last operation on the buffer was of type write (write index advanced).
+				      !last_was_write corresponds to read operation accordingly (read pinter advanced). */
+  int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
+  int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm'.)*/
 
 #ifdef RB_ENABLE_SHM
-  char memname_struct[256];
-  char memname_buffer[256];
+  char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle. */
 #endif
 
 #ifdef RB_PROVIDE_LOCKS
-  pthread_mutex_t read_lock;
-  pthread_mutex_t write_lock;
+  pthread_mutexattr_t mutex_attributes;
+  pthread_mutex_t read_lock;		/**< \brief Mutex lock for mutually exclusive read operations. */
+  pthread_mutex_t write_lock;		/**< \brief Mutex lock for mutually exclusive write operations. */
 #endif
 }
 rb_t;
 
 /**
- * Read and write vectors are of type rb_data_t.
+ * Read and write regions are of type rb_region_t.
  * 
- * See rb_get_read_vectors(), rb_get_write_vectors(), rb_get_next_read_vector(), rb_get_next_write_vector().
+ * A region is a continuous part in the ringbuffer, defined through start (pointer) and length (size).
+ * 
+ * See rb_get_read_regions(), rb_get_write_regions(), rb_get_next_read_region(), rb_get_next_write_region().
  *
  * Example use:
  * @code
- * rb_data_t rvec[2];
- * rb_get_read_vectors(rb,rvec);
- * if(rvec[0].size>0) { //do stuff with rvec[0].buffer, first part of possible split }
- * if(rvec[1].size>0) { //do stuff with rvec[1].buffer, second part of possible split }
+ * rb_region_t regions[2];
+ * rb_get_read_regions(rb,regions);
+ * if(regions[0].size>0) { //do stuff with regions[0].buffer, first part of possible split }
+ * if(regions[1].size>0) { //do stuff with regions[1].buffer, second part of possible split }
  * @endcode
  */
 typedef struct  
@@ -173,13 +181,14 @@ typedef struct
 			            or full area of the main byte buffer in rb_t. */
   size_t size;		/**< \brief Count of bytes that can be read from the buffer. */
 } 
-rb_data_t;
+rb_region_t;
 
 static inline rb_t *rb_new(size_t size);
 static inline rb_t *rb_new_shared(size_t size);
 
 static inline void rb_free(rb_t *rb);
 static inline int rb_mlock(rb_t *rb);
+static inline int rb_munlock(rb_t *rb);
 static inline void rb_reset(rb_t *rb);
 
 static inline size_t rb_can_read(const rb_t *rb);
@@ -202,13 +211,13 @@ static inline size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t o
 static inline size_t rb_skip_byte(rb_t *rb);
 static inline size_t rb_write_byte(rb_t *rb, const char *source);
 
-static inline size_t rb_advance_read_pointer(rb_t *rb, size_t count);
-static inline size_t rb_advance_write_pointer(rb_t *rb, size_t count);
+static inline size_t rb_advance_read_index(rb_t *rb, size_t count);
+static inline size_t rb_advance_write_index(rb_t *rb, size_t count);
 
-static inline void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec);
-static inline void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec);
-static inline void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec);
-static inline void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec);
+static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions);
+static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions);
+static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region);
+static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region);
 
 //if either multiple readers or writers are involved, some kind of
 //locks can't possibly be circumvented
@@ -217,13 +226,17 @@ static inline void rb_release_read(rb_t *rb);
 static inline int rb_try_exclusive_write(rb_t *rb);
 static inline void rb_release_write(rb_t *rb);
 
+static inline void *buf_ptr(const rb_t *rb);
+
+static inline void rb_debug(rb_t *rb);
+static inline void rb_print_regions(rb_t *rb);
 
 /*
 rules in this ring:
 -when imagined as a linear space with infinite length
-	-read pointer can never pass write pointer
-	-write pointer can never pass read pointer
-	-read and write pointers can be at the same place
+	-read index can never pass write index
+	-write index can never pass read index
+	-read and write indices can be at the same place
 
 both r and w at the same position:
      r
@@ -233,7 +246,7 @@ both r and w at the same position:
 ambiguous. possible meanings:
 A) cannot write (0),  max read  (size)
 B) cannot read  (0) , max write (size)
--> need to know last pointer movement
+-> need to know last index movement
 
 if last was w:
 
@@ -249,9 +262,9 @@ if last was r:
      w
 ->case B
 
-after creation of a new ringbuffer r==w==0, last moved pointer r (can read 0, can write size)
+after creation of a new ringbuffer r==w==0, last moved index r (can read 0, can write size)
 
-any constellation of read and write pointers where r!=w: last pointer movement must not be considered
+any constellation of read and write indices where r!=w: last index movement must not be considered
 
   r   w
 ----------
@@ -280,54 +293,55 @@ non-blocking:
 thread safety:
 -one reader will never create a situation where two read operations are happening at the same time
 	hence this won't happen:
-	-two readers trying to move the read pointer at the same time
+	-two readers trying to move the read index at the same time
 	-out-of-sequence situation: 
 		reader a starts to read, reader b starts to read
 			reader a finished, reader b finished OR
 			reader b finished, reader a finished
 -the same applies to the writing side
 
--thread safe read operations won't touch the write pointer or touch bytes beyond the write pointer
--thread safe write operations won't touch the read pointer or touch bytes beyond the read pointer
+-thread safe read operations won't touch the write index or touch bytes beyond the write index
+-thread safe write operations won't touch the read index or touch bytes beyond the read index
 
--methods that move read AND write pointers are all NOT thread safe
+-methods that move read AND write indices are all NOT thread safe
 */
 
 /**
- * Allocates a ringbuffer data structure of a specified size. The
+ * Allocate a ringbuffer data structure of a specified size. The
  * caller must arrange for a call to rb_free() to release
  * the memory associated with the ringbuffer after use.
  *
+ * The ringbuffer is allocated in heap memory with malloc() unless 
+ * RB_DEFAULT_USE_SHM=1 is set at compile time in which case rb_new_shared()
+ * will be called implicitely.
+ *
  * @param size the ringbuffer size in bytes, >0
  *
- * @return a pointer to a new rb_t, if successful; NULL
- * otherwise.
+ * @return a pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
 static inline rb_t *rb_new(size_t size)
 {
 #ifdef RB_ENABLE_SHM
-	if(RB_DEFAULT_USE_SHM==1)
+	if(RB_DEFAULT_USE_SHM!=-1)
 	{
 		return rb_new_shared(size);
 	}
 #endif
-
 	if(size<1) {return NULL;}
 
 	rb_t *rb;
-	rb=(rb_t*)malloc(sizeof(rb_t)); //
+
+	//malloc space for rb_t struct and buffer
+	rb=(rb_t*)malloc(sizeof(rb_t) + size); //
 	if(rb==NULL) {return NULL;}
-	rb->buffer=(char*)malloc(size); //
-	if(rb->buffer==NULL)
-	{
-		free(rb);
-		return NULL;
-	}
+
+	//the attached buffer is in the same malloced space
+	//right after rb_t (at offset sizeof(rb_t))
 
 	rb->size=size;
-	rb->write_pointer=0;
-	rb->read_pointer=0;
+	rb->write_index=0;
+	rb->read_index=0;
 	rb->last_was_write=0;	
 	rb->memory_locked=0;
 	rb->in_shared_memory=0;
@@ -340,9 +354,31 @@ static inline rb_t *rb_new(size_t size)
 }
 
 /**
-* n/a
-*/
-#ifdef RB_ENABLE_SHM
+ * Allocate a ringbuffer data structure of a specified size.
+ *
+ * The ringbuffer is allocated as a file in shared memory with a name similar to
+ * 'b6310884-9938-11e5-bf8c-74d435e313ae'. Shared memory is normally visible in the
+ * filesystem under /dev/shm/. The generated name ought to be unique (uuid) and 
+ * can be accessed in rb_t as member ->shm_handle. 
+ *
+ * Ringbuffers allocated in shared memory can be accessed by other processes.
+ *
+ * Not calling rb_free() after use means to leave a file in /dev/shm/.
+ * This can can be intentional or not.
+ *
+ * Inspecting a ringbuffer in /dev/shm/ for debug purposes can be done from a
+ * shell using i.e. hexdump.
+ *
+ * Example to see what's going on in a small buffer:
+ *
+ * @code
+ *	watch -d -n 0.1 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
+ * @endcode
+ *
+ * @param size the ringbuffer size in bytes, >0
+ *
+ * @return a pointer to a new rb_t if successful; NULL otherwise.
+ */
 //=============================================================================
 static inline rb_t *rb_new_shared(size_t size)
 {
@@ -356,67 +392,107 @@ static inline rb_t *rb_new_shared(size_t size)
 	//create rb_t in shared memory
 	uuid_t uuid;
 	uuid_generate_time_safe(uuid);
-	char memname_struct[37]; //i.e. "b6310884-9938-11e5-bf8c-74d435e313ae" + "\0"
-	uuid_unparse_lower(uuid, memname_struct);
+	char shm_handle[37]; //i.e. "b6310884-9938-11e5-bf8c-74d435e313ae" + "\0"
+	uuid_unparse_lower(uuid, shm_handle);
 
 	//O_TRUNC |
-	int fd=shm_open(memname_struct,O_CREAT | O_RDWR, 0666);
+	int fd=shm_open(shm_handle,O_CREAT | O_RDWR, 0666);
 	if(fd<0) {return NULL;}
 
-	int r=ftruncate(fd,sizeof(rb_t));
+	int r=ftruncate(fd,sizeof(rb_t) + size);
 	if(r!=0) {return NULL;}
 
 	//void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
-	rb=(rb_t*)mmap(0, sizeof(rb_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	rb=(rb_t*)mmap(0, sizeof(rb_t) + size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	close(fd);
 
 	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
-
-	memcpy(rb->memname_struct,memname_struct,37);
-//	fprintf(stderr,"rb->memname_struct: %s\n",rb->memname_struct);
-
-	//create rb_t->buffer in shared memory
-	uuid_generate_time_safe(uuid);
-	char memname_buffer[37];
-	uuid_unparse_lower(uuid, memname_buffer);
-
-	fd=shm_open(memname_buffer,O_CREAT | O_RDWR, 0666);
-	if(fd<0) {return NULL;}
-
-	r=ftruncate(fd,size);
-	if(r!=0) {return NULL;}
-
-	rb->buffer=(char*)mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	close(fd);
-
-	if(rb->buffer==NULL || rb->buffer==MAP_FAILED)
-	{
-		shm_unlink(memname_struct);
-		return NULL;
-	}
-
-	memcpy(rb->memname_buffer,memname_buffer,37);
-//	fprintf(stderr,"rb->memname_buffer: %s\n",rb->memname_buffer);
+//	fprintf(stderr,"rb address %lu\n",(unsigned long int)rb);
+	memcpy(rb->shm_handle,shm_handle,37);
+//	fprintf(stderr,"buffer address %lu\n",(unsigned long int)buf_ptr(rb));
 
 	rb->size=size;
-	rb->write_pointer=0;
-	rb->read_pointer=0;
+	rb->write_index=0;
+	rb->read_index=0;
 	rb->last_was_write=0;	
 	rb->memory_locked=0;
 	rb->in_shared_memory=1;
 
 #ifdef RB_PROVIDE_LOCKS
-	pthread_mutex_init ( &rb->read_lock, NULL);
-	pthread_mutex_init ( &rb->write_lock, NULL);
+	pthread_mutexattr_init(&rb->mutex_attributes);
+	pthread_mutexattr_setpshared(&rb->mutex_attributes, PTHREAD_PROCESS_SHARED);
+	pthread_mutex_init(&rb->read_lock, &rb->mutex_attributes);
+	pthread_mutex_init(&rb->write_lock, &rb->mutex_attributes);
 #endif
 	return rb;
 }
-#endif
 
 /**
- * Frees the ringbuffer data structure allocated by an earlier call to rb_new().
+ * Open an existing ringbuffer data structure in shared memory.
  *
- * This is not thread safe.
+ * The ringbuffer to open must be available as a file in shared memory.
+ * Shared memory is normally visible in the filesystem under /dev/shm/.
+ *
+ * Not calling rb_free() after use means to leave a file in /dev/shm/. This can be
+ * intentional or not.
+ *
+ * Inspecting a ringbuffer in /dev/shm/ for debug purposes can be done from a
+ * shell using i.e. hexdump.
+ *
+ * Example to see what's going on in a small buffer:
+ *
+ *@code
+ *watch -d -n 0 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
+ *@endcode
+ *
+ * @param shm_handle a name (uuid) identifying the ringbuffer (without leading path) to open
+ *
+ * @return a pointer to a new rb_t if successful; NULL otherwise.
+ */
+//=============================================================================
+static inline rb_t *rb_open_shared(const char *shm_handle)
+{
+#ifndef RB_ENABLE_SHM
+	return NULL;
+#endif
+	rb_t *rb;
+
+	//create rb_t in shared memory
+	uuid_t uuid;
+
+	//O_TRUNC | O_CREAT | 
+	int fd=shm_open(shm_handle,O_RDWR, 0666);
+	if(fd<0) {return NULL;}
+
+//??
+//	int r=ftruncate(fd,sizeof(rb_t));
+//	if(r!=0) {return NULL;}
+
+	//void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+	rb=(rb_t*)mmap(0, sizeof(rb_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+
+	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
+
+	fprintf(stderr,"size %zu\n ",rb->size);
+	size_t size=rb->size;
+
+	//unmap and remap fully (knowing size now)
+	munmap(rb,sizeof(rb_t));
+	rb=(rb_t*)mmap(0, sizeof(rb_t) + size , PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	close(fd);
+
+	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
+
+	fprintf(stderr,"rb address %lu\n",(unsigned long int)rb);
+	fprintf(stderr,"buffer address %lu\n",(unsigned long int)buf_ptr(rb));
+
+	return rb;
+}
+
+/**
+ * Free the ringbuffer data structure allocated by an earlier call to rb_new().
+ *
+ * Any active reader and/or writer should be done before calling rb_free().
  *
  * @param rb a pointer to the ringbuffer structure.
  */
@@ -424,31 +500,20 @@ static inline rb_t *rb_new_shared(size_t size)
 static inline void rb_free(rb_t *rb)
 {
 	if(rb==NULL) {return;}
-
 #ifdef RB_USE_MLOCK
 	if(rb->memory_locked)
 	{
-		munlock(rb->buffer, rb->size);
+		munlock(rb, sizeof(rb_t) + rb->size);
 	}
 #endif
-
 	rb->size=0;
-
 #ifdef RB_ENABLE_SHM
 	if(rb->in_shared_memory)
 	{
-		shm_unlink(rb->memname_buffer);
-		shm_unlink(rb->memname_struct);
+		shm_unlink(rb->shm_handle);
 		return;
 	}
-	else
-	{
-		goto _not_in_shared;
-	}
 #endif
-
-_not_in_shared:
-	free(rb->buffer);
 	free(rb);
 }
 
@@ -461,13 +526,13 @@ _not_in_shared:
  *
  * @param rb a pointer to the ringbuffer structure.
  *
- * @return success: lock==1, no lock==0
+ * @return success: lock==1, error==0
  */
 //=============================================================================
 static inline int rb_mlock(rb_t *rb)
 {
 #ifdef RB_USE_MLOCK
-	if(mlock(rb->buffer, rb->size)) {return 0;}
+	if(mlock(rb, sizeof(rb_t) + rb->size)) {return 0;}
 	rb->memory_locked=1;
 	return 1;
 #else
@@ -476,25 +541,47 @@ static inline int rb_mlock(rb_t *rb)
 }
 
 /**
- * Reset the read and write pointers, making an empty buffer.
+ * Unlock a previously locked ringbuffer data block in memory.
  *
- * This is not thread safe.
+ * Uses the munlock() system call.
+ * 
+ * This is not a realtime operation.
+ *
+ * @param rb a pointer to the ringbuffer structure.
+ *
+ * @return success: unlock==1, error==0
+ */
+//=============================================================================
+static inline int rb_munlock(rb_t *rb)
+{
+#ifdef RB_USE_MLOCK
+	if(munlock(rb, sizeof(rb_t) + rb->size)) {return 0;}
+	rb->memory_locked=0;
+	return 1;
+#else
+	return 0;
+#endif
+}
+
+/**
+ * Reset the read and write indices, making an empty buffer.
+ *
+ * Any active reader and/or writer should be done before calling rb_reset().
  *
  * @param rb a pointer to the ringbuffer structure.
  */
 //=============================================================================
 static inline void rb_reset(rb_t *rb)
 {
-	rb->read_pointer=0;
-	rb->write_pointer=0;
+	rb->read_index=0;
+	rb->write_index=0;
 	rb->last_was_write=0;
 }
 
-// in front of the read pointer and behind the write pointer.
 /**
  * Return the number of bytes available for reading.
  *
- * This is the number of bytes in front of the read pointer up to the write pointer.
+ * This is the number of bytes in front of the read index up to the write index.
  *
  * @param rb a pointer to the ringbuffer structure.
  *
@@ -503,8 +590,8 @@ static inline void rb_reset(rb_t *rb)
 //=============================================================================
 static inline size_t rb_can_read(const rb_t *rb)
 {
-	size_t r=rb->read_pointer;
-	size_t w=rb->write_pointer;
+	size_t r=rb->read_index;
+	size_t w=rb->write_index;
 
 	if(r==w)
 	{
@@ -518,7 +605,7 @@ static inline size_t rb_can_read(const rb_t *rb)
 /**
  * Return the number of bytes available for writing.
  *
- * This is the number of bytes in front of the write pointer up to the read pointer.
+ * This is the number of bytes in front of the write index up to the read index.
  *
  * @param rb a pointer to the ringbuffer structure.
  *
@@ -527,8 +614,8 @@ static inline size_t rb_can_read(const rb_t *rb)
 //=============================================================================
 static inline size_t rb_can_write(const rb_t *rb)
 {
-	size_t r=rb->read_pointer;
-	size_t w=rb->write_pointer;
+	size_t r=rb->read_index;
+	size_t w=rb->write_index;
 
 	if(r==w)
 	{
@@ -540,7 +627,7 @@ static inline size_t rb_can_write(const rb_t *rb)
 }
 
 /**
- * Read data from the ringbuffer and move the read pointer accordingly.
+ * Read data from the ringbuffer and move the read index accordingly.
  * This is a copying data reader.
  *
  * The count of bytes effectively read can be less than the requested
@@ -552,6 +639,10 @@ static inline size_t rb_can_write(const rb_t *rb)
  * @param count the number of bytes to read.
  *
  * @return the number of bytes read, which may range from 0 to count.
+ *
+ *
+ * //needs code example
+ *
  */
 //=============================================================================
 static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
@@ -561,13 +652,13 @@ static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
 	//can not read more than offset, no chance to read from there
 	if(!(can_read_count=rb_can_read(rb))) {return 0;}
 	size_t do_read_count=count>can_read_count ? can_read_count : count;
-	size_t linear_end=rb->read_pointer+do_read_count;
+	size_t linear_end=rb->read_index+do_read_count;
 	size_t copy_count_1;
 	size_t copy_count_2;
 
 	if(linear_end>rb->size)
 	{
-		copy_count_1=rb->size-rb->read_pointer;
+		copy_count_1=rb->size-rb->read_index;
 		copy_count_2=linear_end-rb->size;
 	}
 	else
@@ -576,23 +667,24 @@ static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
 		copy_count_2=0;
 	}
 
-	memcpy(destination, &(rb->buffer[rb->read_pointer]), copy_count_1);
+	memcpy(destination, &( ((char*)buf_ptr(rb)) [rb->read_index] ), copy_count_1);
 
 	if(!copy_count_2)
 	{
-		rb->read_pointer=(rb->read_pointer+copy_count_1) % rb->size;
+		rb->read_index=(rb->read_index+copy_count_1) % rb->size;
 	}
 	else
 	{
-		memcpy(destination+copy_count_1, &(rb->buffer[0]), copy_count_2);
-		rb->read_pointer=copy_count_2 % rb->size;
+		memcpy(destination+copy_count_1, &( ((char*)buf_ptr(rb)) [0]), copy_count_2);
+
+		rb->read_index=copy_count_2 % rb->size;
 	}
 	rb->last_was_write=0;
 	return do_read_count;
 }
 
 /**
- * Write data into the ringbuffer and move the write pointer accordingly.
+ * Write data into the ringbuffer and move the write index accordingly.
  * This is a copying data writer.
  *
  * The count of bytes effectively written can be less than the requested
@@ -603,6 +695,9 @@ static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
  * @param count the number of bytes to write.
  *
  * @return the number of bytes written, which may range from 0 to count
+ * 
+ * //needs code example
+ *
  */
 //=============================================================================
 static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
@@ -619,11 +714,11 @@ static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
 	}
 
 	do_write_count=count>can_write_count ? can_write_count : count;
-	linear_end=rb->write_pointer+do_write_count;
+	linear_end=rb->write_index+do_write_count;
 
 	if(linear_end>rb->size)
 	{
-		copy_count_1=rb->size-rb->write_pointer;
+		copy_count_1=rb->size-rb->write_index;
 		copy_count_2=linear_end-rb->size;
 	}
 	else
@@ -632,16 +727,16 @@ static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
 		copy_count_2=0;
 	}
 
-	memcpy(&(rb->buffer[rb->write_pointer]), source, copy_count_1);
+	memcpy( &(  ((char*)buf_ptr(rb))  [rb->write_index] ), source, copy_count_1);
 
 	if(!copy_count_2)
 	{
-		rb->write_pointer=(rb->write_pointer+copy_count_1) % rb->size;
+		rb->write_index=(rb->write_index+copy_count_1) % rb->size;
 	}
 	else
 	{
-		memcpy(&(rb->buffer[0]), source+copy_count_1, copy_count_2);
-		rb->write_pointer=copy_count_2 % rb->size;
+		memcpy( &(  ((char*)buf_ptr(rb))  [0]), source+copy_count_1, copy_count_2);
+		rb->write_index=copy_count_2 % rb->size;
 	}
 	rb->last_was_write=1;
 	return do_write_count;
@@ -649,11 +744,11 @@ static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
 
 /**
  * Read data from the ringbuffer. Opposed to rb_read()
- * this function does not move the read pointer. Thus it's
+ * this function does not move the read index. Thus it's
  * a convenient way to inspect data in the ringbuffer in a
  * continuous fashion. The data is copied into a buffer provided by the caller.
- * For "raw" non-copy inspection of the data in the ringbuffer 
- * use rb_get_read_vectors() or rb_get_next_read_vector().
+ * For non-copy inspection of the data in the ringbuffer
+ * use rb_get_read_regions() or rb_get_next_read_region().
  *
  * The count of bytes effectively read can be less than the requested
  * count, which is limited to rb_can_read() bytes.
@@ -673,11 +768,11 @@ static inline size_t rb_peek(const rb_t *rb, char *destination, size_t count)
 
 /**
  * Read data from the ringbuffer. Opposed to rb_read()
- * this function does not move the read pointer. Thus it's
+ * this function does not move the read index. Thus it's
  * a convenient way to inspect data in the ringbuffer in a
  * continuous fashion. The data is copied into a buffer provided by the caller.
- * For "raw" non-copy inspection of the data in the ringbuffer 
- * use rb_get_read_vectors() or rb_get_next_read_vector().
+ * For non-copy inspection of the data in the ringbuffer
+ * use rb_get_read_regions() or rb_get_next_read_region().
  *
  * The count of bytes effectively read can be less than the requested
  * count, which is limited to rb_can_read() bytes.
@@ -700,9 +795,9 @@ static inline size_t rb_peek_at(const rb_t *rb, char *destination, size_t count,
 	//limit read count respecting offset
 	size_t do_read_count=count>can_read_count-offset ? can_read_count-offset : count;
 	//adding the offset, knowing it could be beyond buffer end
-	size_t tmp_read_pointer=rb->read_pointer+offset;
-	//including all: current read pointer + offset + limited read count
-	size_t linear_end=tmp_read_pointer+do_read_count;
+	size_t tmp_read_index=rb->read_index+offset;
+	//including all: current read index + offset + limited read count
+	size_t linear_end=tmp_read_index+do_read_count;
 	size_t copy_count_1;
 	size_t copy_count_2;
 
@@ -710,17 +805,17 @@ static inline size_t rb_peek_at(const rb_t *rb, char *destination, size_t count,
 	if(linear_end>rb->size)
 	{
 		//still beyond
-		if(tmp_read_pointer>=rb->size)
+		if(tmp_read_index>=rb->size)
 		{
 			//all in rolled over
-			tmp_read_pointer%=rb->size;
+			tmp_read_index%=rb->size;
 			copy_count_1=do_read_count;
 			copy_count_2=0;
 		}
 		//segmented
 		else
 		{
-			copy_count_1=rb->size-tmp_read_pointer;
+			copy_count_1=rb->size-tmp_read_index;
 			copy_count_2=linear_end-rb->size-offset;
 		}
 	}
@@ -730,20 +825,19 @@ static inline size_t rb_peek_at(const rb_t *rb, char *destination, size_t count,
 		copy_count_1=do_read_count;
 		copy_count_2=0;
 	}
-
-	memcpy(destination, &(rb->buffer[tmp_read_pointer]), copy_count_1);
+	memcpy(destination, &(  ((char*)buf_ptr(rb))  [tmp_read_index]), copy_count_1);
 
 	if(copy_count_2)
 	{
-		memcpy(destination+copy_count_1, &(rb->buffer[0]), copy_count_2);
+		memcpy(destination+copy_count_1, &(  ((char*)buf_ptr(rb))  [0]), copy_count_2);
 	}
 	return do_read_count;
 }
 
 /**
  * Drop / ignore all data available to read.
- * This moves the read pointer up to the current write pointer
- * (nothing left to read) using rb_advance_read_pointer().
+ * This moves the read index up to the current write index
+ * (nothing left to read) using rb_advance_read_index().
  *
  * @param rb a pointer to the ringbuffer structure.
  *
@@ -752,7 +846,7 @@ static inline size_t rb_peek_at(const rb_t *rb, char *destination, size_t count,
 //=============================================================================
 static inline size_t rb_drop(rb_t *rb)
 {
-	return rb_advance_read_pointer(rb,rb_can_read(rb));
+	return rb_advance_read_index(rb,rb_can_read(rb));
 }
 
 /**
@@ -788,7 +882,7 @@ static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset)
 
 /**
  * Read one byte from the ringbuffer.
- * This advances the read pointer by one byte if at least one byte
+ * This advances the read index by one byte if at least one byte
  * is available in the ringbuffer's readable space.
  *
  * This is a copying data reader.
@@ -805,7 +899,7 @@ static inline size_t rb_read_byte(rb_t *rb, char *destination)
 	return rb_read(rb,destination,1);
 }
 /**
- * Peek one byte from the ringbuffer (don't move the read pointer).
+ * Peek one byte from the ringbuffer (don't move the read index).
  * This is a copying data reader.
  *
  * @param rb a pointer to the ringbuffer structure.
@@ -821,7 +915,7 @@ static inline size_t rb_peek_byte(const rb_t *rb, char *destination)
 }
 
 /**
- * Peek one byte from the ringbuffer at the given offset (don't move the read pointer).
+ * Peek one byte from the ringbuffer at the given offset (don't move the read index).
  * This is a copying data reader.
  *
  * @param rb a pointer to the ringbuffer structure.
@@ -837,21 +931,21 @@ static inline size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t o
 	size_t can_read_count;
 	if((can_read_count=rb_can_read(rb)<=offset)) {return 0;}
 
-	size_t tmp_read_pointer=rb->read_pointer+offset;
+	size_t tmp_read_index=rb->read_index+offset;
 
-	if(rb->size<=tmp_read_pointer)
+	if(rb->size<=tmp_read_index)
 	{
-		memcpy(destination, &(rb->buffer[tmp_read_pointer-rb->size]),1);
+		memcpy(destination, &(  ((char*)buf_ptr(rb))  [tmp_read_index-rb->size]),1);
 	}
 	else
 	{
-		memcpy(destination, &(rb->buffer[tmp_read_pointer]),1);
+		memcpy(destination, &(  ((char*)buf_ptr(rb))  [tmp_read_index]),1);
 	}
 }
 
 /**
  * Drop / ignore one byte available to read.
- * This advances the read pointer by one byte if at least one byte
+ * This advances the read index by one byte if at least one byte
  * is available in the ringbuffer's readable space.
  *
  * @param rb a pointer to the ringbuffer structure.
@@ -861,12 +955,12 @@ static inline size_t rb_peek_byte_at(const rb_t *rb, char *destination, size_t o
 //=============================================================================
 static inline size_t rb_skip_byte(rb_t *rb)
 {
-	return rb_advance_read_pointer(rb,1);
+	return rb_advance_read_index(rb,1);
 }
 
 /**
  * Write one byte to the ringbuffer.
- * This advances the write pointer by one byte if at least one byte
+ * This advances the write index by one byte if at least one byte
  * can be written to the ringbuffer's writable space.
  *
  * @param rb a pointer to the ringbuffer structure.
@@ -882,17 +976,17 @@ static inline size_t rb_write_byte(rb_t *rb, const char *source)
 }
 
 /**
- * Advance the read pointer.
+ * Advance the read index.
  *
  * After data have been read from the ringbuffer using the pointers
- * returned by rb_get_read_vectors() or rb_get_next_read_vector(), use this
- * function to advance the read pointer, making that space available for 
+ * returned by rb_get_read_regions() or rb_get_next_read_region(), use this
+ * function to advance the read index, making that space available for 
  * future write operations.
  *
- * The count of the read pointer advance can be less than the requested
+ * The count of the read index advance can be less than the requested
  * count, which is limited to rb_can_read() bytes.
  *
- * Advancing the read pointer without prior reading the involved bytes 
+ * Advancing the read index without prior reading the involved bytes 
  * means dropping/ignoring data.
  * 
  * @param rb a pointer to the ringbuffer structure.
@@ -901,34 +995,34 @@ static inline size_t rb_write_byte(rb_t *rb, const char *source)
  * @return the number of bytes advanced, which may range from 0 to count.
  */
 //=============================================================================
-static inline size_t rb_advance_read_pointer(rb_t *rb, size_t count)
+static inline size_t rb_advance_read_index(rb_t *rb, size_t count)
 {
 	if(count==0) {return 0;}
 	size_t can_read_count;
 	if(!(can_read_count=rb_can_read(rb))) {return 0;}
 
 	size_t do_advance_count=count>can_read_count ? can_read_count : count;
-	size_t r=rb->read_pointer;
+	size_t r=rb->read_index;
 	size_t linear_end=r+do_advance_count;
-	size_t tmp_read_pointer=linear_end>rb->size ? linear_end-rb->size : r+do_advance_count;
+	size_t tmp_read_index=linear_end>rb->size ? linear_end-rb->size : r+do_advance_count;
 
-	rb->read_pointer=(tmp_read_pointer%=rb->size);//
-	rb->last_was_write=0;//
+	rb->read_index=(tmp_read_index%=rb->size);
+	rb->last_was_write=0;
 	return do_advance_count;
 }
 
 /**
- * Advance the write pointer.
+ * Advance the write index.
  *
- * After data have been written the ringbuffer using the pointers
- * returned by rb_get_write_vectors() or rb_get_next_write_vector() use this
- * function to advance the write pointer, making the data available for
+ * After data have been written to the ringbuffer using the pointers
+ * returned by rb_get_write_regions() or rb_get_next_write_region() use this
+ * function to advance the write index, making the data available for
  * future read operations.
  *
- * The count of the write pointer advance can be less than the requested
+ * The count of the write index advance can be less than the requested
  * count, which is limited to rb_can_write() bytes.
  *
- * Advancing the write pointer without prior writing the involved bytes 
+ * Advancing the write index without prior writing the involved bytes 
  * means leaving arbitrary data in the ringbuffer.
  *
  * @param rb a pointer to the ringbuffer structure.
@@ -937,26 +1031,26 @@ static inline size_t rb_advance_read_pointer(rb_t *rb, size_t count)
  * @return the number of bytes advanced, which may range from 0 to count
  */
 //=============================================================================
-static inline size_t rb_advance_write_pointer(rb_t *rb, size_t count)
+static inline size_t rb_advance_write_index(rb_t *rb, size_t count)
 {
 	if(count==0) {return 0;}
 	size_t can_write_count;
 	if(!(can_write_count=rb_can_write(rb))) {return 0;}
 
 	size_t do_advance_count=count>can_write_count ? can_write_count : count;
-	size_t w=rb->write_pointer;
+	size_t w=rb->write_index;
 	size_t linear_end=w+do_advance_count;
-	size_t tmp_write_pointer=linear_end>rb->size ? linear_end-rb->size : w+do_advance_count;
+	size_t tmp_write_index=linear_end>rb->size ? linear_end-rb->size : w+do_advance_count;
 
-	rb->write_pointer=(tmp_write_pointer%=rb->size);//
-	rb->last_was_write=1;//
+	rb->write_index=(tmp_write_index%=rb->size);
+	rb->last_was_write=1;
 	return do_advance_count;
 }
 
 /**
  * Fill a data structure with a description of the current readable
  * data held in the ringbuffer. This description is returned in a two
- * element array of rb_data_t. Two elements are needed
+ * element array of rb_region_t. Two elements are needed
  * because the data to be read may be split across the end of the
  * ringbuffer.
  *
@@ -973,41 +1067,41 @@ static inline size_t rb_advance_write_pointer(rb_t *rb, size_t count)
  * pointers to the ringbuffer's readable spaces.
  *
  * If data was read this way, the caller must manually advance the read
- * pointer accordingly using rb_advance_read_pointer().
+ * index accordingly using rb_advance_read_index().
  *
  * @param rb a pointer to the ringbuffer structure.
- * @param vec a pointer to a 2 element array of rb_data_t.
+ * @param regions a pointer to a 2 element array of rb_region_t.
  *
  */
 //=============================================================================
-static inline void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions)
 {
 	size_t can_read_count=rb_can_read(rb);
-	size_t r=rb->read_pointer;
+	size_t r=rb->read_index;
 	size_t linear_end=r+can_read_count;
 
 	if(linear_end>rb->size)
 	{
 		// Two part vector: the rest of the buffer after the current write
-		// pointer, plus some from the start of the buffer.
-		vec[0].buffer=&(rb->buffer[r]);
-		vec[0].size=rb->size-r;
-		vec[1].buffer=rb->buffer;
-		vec[1].size=linear_end-rb->size;
+		// index, plus some from the start of the buffer.
+		regions[0].buffer=&(  ((char*)buf_ptr(rb))  [r]);
+		regions[0].size=rb->size-r;
+		regions[1].buffer=  ((char*)buf_ptr(rb));
+		regions[1].size=linear_end-rb->size;
 	}
 	else
 	{
 		// Single part vector: just the rest of the buffer
-		vec[0].buffer=&(rb->buffer[r]);
-		vec[0].size=can_read_count;
-		vec[1].size=0;
+		regions[0].buffer=&(  ((char*)buf_ptr(rb))  [r]);
+		regions[0].size=can_read_count;
+		regions[1].size=0;
 	}
 }
 
 /**
  * Fill a data structure with a description of the current writable
  * space in the ringbuffer. The description is returned in a two
- * element array of rb_data_t. Two elements are needed
+ * element array of rb_region_t. Two elements are needed
  * because the space available for writing may be split across the end
  * of the ringbuffer.
  *
@@ -1021,95 +1115,95 @@ static inline void rb_get_read_vectors(const rb_t *rb, rb_data_t *vec)
  * the corresponding @a buf field.
  *
  * This method allows to write data to the ringbuffer directly using
- * pointers to the ringbuffer's writable spaces.
+ * pinters to the ringbuffer's writable spaces.
  *
  * If data was written this way, the caller must manually advance the write
- * pointer accordingly using rb_advance_write_pointer().
+ * index accordingly using rb_advance_write_index().
  *
  * @param rb a pointer to the ringbuffer structure.
- * @param vec a pointer to a 2 element array of rb_data_t.
+ * @param regions a pointer to a 2 element array of rb_region_t.
  */
 //=============================================================================
-static inline void rb_get_write_vectors(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions)
 {
 	size_t can_write_count=rb_can_write(rb);
-	size_t w=rb->write_pointer;
+	size_t w=rb->write_index;
 	size_t linear_end=w+can_write_count;
 
 	if(linear_end>rb->size)
 	{
 		// Two part vector: the rest of the buffer after the current write
-		// pointer, plus some from the start of the buffer.
-		vec[0].buffer=&(rb->buffer[w]);
-		vec[0].size=rb->size-w;
-		vec[1].buffer=rb->buffer;
-		vec[1].size=linear_end-rb->size;
+		// index, plus some from the start of the buffer.
+		regions[0].buffer=&(  ((char*)buf_ptr(rb))  [w]);
+		regions[0].size=rb->size-w;
+		regions[1].buffer=  ((char*)buf_ptr(rb));
+		regions[1].size=linear_end-rb->size;
 	}
 	else
 	{
 		// Single part vector: just the rest of the buffer
-		vec[0].buffer=&(rb->buffer[w]);
-		vec[0].size=can_write_count;
-		vec[1].size=0;
+		regions[0].buffer=&(  ((char*)buf_ptr(rb))  [w]);
+		regions[0].size=can_write_count;
+		regions[1].size=0;
 	}
 }
 
 /**
-* This function is similar to rb_get_write_vectors().
-* Opposed to rb_get_write_vectors(), it will only return the first (next) vector
-* instead of an array of two vectors. The vector is returned to the caller by 
-* setting the rb_data_t variable provided by the caller.
-* If data was read using the provided pointer and size in rb_data_t, the read
-* pointer must be manually advanced using rb_advance_read_pointer().
+* This function is similar to rb_get_write_regions().
+* Opposed to rb_get_write_regions(), it will only return the first (next) region
+* instead of an array of two regions. The region is returned to the caller by 
+* setting the rb_region_t variable provided by the caller.
+* If data was read using the provided pointer and size in rb_region_t, the read
+* index must be manually advanced using rb_advance_read_index().
 *
 * @param rb a pointer to the ringbuffer structure.
-* @param vec a pointer to a variable of type rb_data_t.
+* @param region a pointer to a variable of type rb_region_t.
 */
 //=============================================================================
-static inline void rb_get_next_read_vector(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region)
 {
 	size_t can_read_count=rb_can_read(rb);
-	size_t r=rb->read_pointer;
+	size_t r=rb->read_index;
 	size_t linear_end=r+can_read_count;
 
 	if(linear_end>rb->size)
 	{
-		vec->buffer=&(rb->buffer[r]);
-		vec->size=rb->size-r;
+		region->buffer=&(  ((char*)buf_ptr(rb))  [r]);
+		region->size=rb->size-r;
 	}
 	else
 	{
-		vec->buffer=&(rb->buffer[r]);
-		vec->size=can_read_count;
+		region->buffer=&(  ((char*)buf_ptr(rb))  [r]);
+		region->size=can_read_count;
 	}
 }
 /**
-* This function is similar to rb_get_read_vectors().
-* Opposed to rb_get_read_vectors(), it will only return the first (next) vector
-* instead of an array of two vectors. The vector is returned to the caller by 
-* setting the rb_data_t variable provided by the caller.
-* If data was written using the provided pointer and size in rb_data_t, the write
-* pointer must be manually advanced using rb_advance_write_pointer().
+* This function is similar to rb_get_read_regions().
+* Opposed to rb_get_read_regions(), it will only return the first (next) region
+* instead of an array of two regions. The region is returned to the caller by 
+* setting the rb_region_t variable provided by the caller.
+* If data was written using the provided pointer and size in rb_region_t, the write
+* index must be manually advanced using rb_advance_write_index().
 *
 * @param rb a pointer to the ringbuffer structure.
-* @param vec a pointer to a variable of type rb_data_t.
+* @param region a pointer to a variable of type rb_region_t.
 */
 //=============================================================================
-static inline void rb_get_next_write_vector(const rb_t *rb, rb_data_t *vec)
+static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region)
 {
 	size_t can_write_count=rb_can_write(rb);
-	size_t w=rb->write_pointer;
+	size_t w=rb->write_index;
 	size_t linear_end=w+can_write_count;
 
 	if(linear_end>rb->size)
 	{
-		vec->buffer=&(rb->buffer[w]);
-		vec->size=rb->size-w;
+		region->buffer=&(  ((char*)buf_ptr(rb))  [w]);
+		region->size=rb->size-w;
 	}
 	else
 	{
-		vec->buffer=&(rb->buffer[w]);
-		vec->size=can_write_count;
+		region->buffer=&(  ((char*)buf_ptr(rb))  [w]);
+		region->size=can_write_count;
 	}
 }
 
@@ -1160,7 +1254,62 @@ _not_found:
 }
 
 /**
-* n/a
+ * Internal method to handle pointer indirections.
+ * A user of rb.h must not call this function directly.
+ * 
+ * Every process that attaches a common shared memory region with mmap() will get a different pointer value (address).
+ * 
+ * A pointer in a shared datastructure in shared memory to another chunk of memory can be problematic:
+ *
+ * -Every process accessing the main shared structure must also have access to the referenced resource.
+ *
+ * -Processes that memory map the referenced chunk will get a different pointer value (address).
+ *
+ * -> A common pointer in shared memory will point to an invalid address except for the process that created it.
+ * 
+ * This problem can be solved by using a known common base and an offset.
+ *
+ * Every process that has a pointer to the start of an rb_t can easily calculate the pointer
+ * to the buffer by offsetting it by sizeof(rb_t) since the buffer is allocated in the same chunk of memory
+ * and attached directly after rb_t members. buf_ptr() does just that.
+ *
+ * @code
+ *
+ *->.------------- start of allocated space == start of rb_t
+ *  |
+ *  | rb_t "header"
+ *  |
+ *->|------ end of rb_t == start of buffer
+ *  |
+ *  | buffer (size bytes)
+ *  |
+ *  |
+ *  |
+ *  .------------- end of allocated space == end of buffer
+ *
+ * Total size = sizeof(rb_t) + size
+ * @endcode
+ *
+ * @param rb a pointer to the ringbuffer structure.
+ *
+ * @return a pointer to the data buffer of this rb_t.
+ */
+static inline void *buf_ptr(const rb_t *rb)
+{
+	return (char*)rb+sizeof(rb_t);
+}
+
+/**
+* Try to lock the ringbuffer for exclusive read.
+* Only one process can lock the ringbuffer for reading at a time.
+* Other processes can not read from the ringbuffer while it is locked.
+* A process that successfully locks the ringbuffer must arrange for a call
+* to rb_release_read() when the lock is not needed any longer.
+*
+* @param rb a pointer to the ringbuffer structure.
+*
+* @return success: locked==1, not locked==0
+*
 */
 //=============================================================================
 static inline int rb_try_exclusive_read(rb_t *rb)
@@ -1174,6 +1323,11 @@ static inline int rb_try_exclusive_read(rb_t *rb)
 }
 
 /**
+* Release a previously acquired write lock with rb_try_exclusive_write().
+*
+* Only processes that successfully locked the ringbuffer previously are allowed to call this function.
+*
+* @param rb a pointer to the ringbuffer structure.
 * n/a
 */
 //=============================================================================
@@ -1185,7 +1339,16 @@ static inline void rb_release_read(rb_t *rb)
 }
 
 /**
-* n/a
+* Try to lock the ringbuffer for exclusive write.
+* Only one process can lock the ringbuffer for reading at a time.
+* Other processes can not read from the ringbuffer while it is locked.
+* A process that successfully locks the ringbuffer must arrange for a call
+* to rb_release_write() when the lock is not needed any longer.
+*
+* @param rb a pointer to the ringbuffer structure.
+*
+* @return success: locked==1, not locked==0
+*
 */
 //=============================================================================
 static inline int rb_try_exclusive_write(rb_t *rb)
@@ -1199,6 +1362,11 @@ static inline int rb_try_exclusive_write(rb_t *rb)
 }
 
 /**
+* Release a previously acquired write lock with rb_try_exclusive_write().
+*
+* Only processes that successfully locked the ringbuffer previously are allowed to call this function.
+*
+* @param rb a pointer to the ringbuffer structure.
 * n/a
 */
 //=============================================================================
@@ -1210,13 +1378,55 @@ static inline void rb_release_write(rb_t *rb)
 #endif
 }
 
+/**
+* Print out information about ringbuffer to stderr.
+*/
+//=============================================================================
+void rb_debug(rb_t *rb)
+{
+        if(rb==NULL)
+        {
+                fprintf(stderr,"rb is NULL\n");
+                return;
+        }
+        fprintf(stderr,"can read  %zu @ %zu  can write %zu @ %zu last was %s\n"
+                ,rb_can_read(rb)
+                ,rb->read_index
+                ,rb_can_write(rb)
+                ,rb->write_index
+		,rb->last_was_write ? "write" : "read"
+        );
+}
+
+/**
+* Print out information about rinbuffer regions to stderr.
+*/
+//=============================================================================
+void rb_print_regions(rb_t *rb)
+{
+        rb_region_t data[2];
+        rb_get_read_regions(rb,data);
+        fprintf(stderr,"read region size  %zu %zu =%zu  "
+                ,data[0].size
+                ,data[1].size
+                ,data[0].size+data[1].size
+        );
+
+        rb_get_write_regions(rb,data);
+        fprintf(stderr,"write region size %zu %zu =%zu\n"
+                ,data[0].size
+                ,data[1].size
+                ,data[0].size+data[1].size
+        );
+}
+
 //=============================================================================
 //"ALIASES"
 
 /**
-* \brief This is an alias to rb_advance_read_pointer().
+* \brief This is an alias to rb_advance_read_index().
 */
-static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_pointer(rb,count);}
+static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_index(rb,count);}
 
 //#define ALIASES_1
 #ifdef ALIASES_1
@@ -1225,10 +1435,10 @@ static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_poi
 static inline rb_t *rb_create(size_t size)			{return rb_new(size);}
 static inline size_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
 static inline size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
-static inline size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_pointer(rb,count);}
-static inline size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_pointer(rb,count);}
-static inline void rb_get_read_vector(const rb_t *rb, rb_data_t *vec) {return rb_get_read_vectors(rb, vec);}
-static inline void rb_get_write_vector(const rb_t *rb, rb_data_t *vec) {return rb_get_read_vectors(rb, vec);}
+static inline size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_index(rb,count);}
+static inline size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_index(rb,count);}
+static inline void rb_get_read_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_read_regions(rb,regions);}
+static inline void rb_get_write_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_read_regions(rb,regions);}
 #endif
 
 //#define ALIASES_2
@@ -1236,8 +1446,8 @@ static inline void rb_get_write_vector(const rb_t *rb, rb_data_t *vec) {return r
 //inspired by https://github.com/xant/libhl/blob/master/src/rbuf.c,
 //http://svn.drobilla.net/lad/trunk/raul/raul/RingBuffer.hpp
 static inline size_t rb_size(rb_t *rb)		{return rb->size;}
-static inline size_t rb_capacity(rb_t *rb)		{return rb->size;}
-static inline void rb_clear(rb_t *rb)			{rb_reset(rb);}
+static inline size_t rb_capacity(rb_t *rb)	{return rb->size;}
+static inline void rb_clear(rb_t *rb)		{rb_reset(rb);}
 static inline void rb_destroy(rb_t *rb)		{rb_free(rb);}
 #endif
 
