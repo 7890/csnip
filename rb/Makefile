@@ -1,7 +1,8 @@
 CC ?= gcc
 PDF_DOC_NAME ?= "lock-free_ringbuffer_rb.h.pdf"
 
-CFLAGS ?= -lpthread -lrt -luuid
+#CFLAGS ?= -lpthread -lrt -luuid
+#CFLAGS ?= -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM
 
 default: rb
 
@@ -9,13 +10,25 @@ all: rb doc
 
 rb:	rb.h rb_test0.c rb_test1.c rb_test2.c rb_shared_reader.c rb_shared_writer.c
 
-	$(CC) -o rb_test0 rb_test0.c $(CFLAGS)
-	$(CC) -o rb_test1 rb_test1.c $(CFLAGS)
-	$(CC) -o rb_test2 rb_test2.c $(CFLAGS)
-	$(CC) -o rb_test3 rb_test3.c $(CFLAGS)
+	#test compile and link variations
 
-	$(CC) -o rb_shared_reader rb_shared_reader.c $(CFLAGS)
-	$(CC) -o rb_shared_writer rb_shared_writer.c $(CFLAGS)
+	$(CC) -o rb_test0 		rb_test0.c 	-DRB_DISABLE_MLOCK 	-DRB_DISABLE_RW_MUTEX 	-DRB_DISABLE_SHM
+	-./rb_test0
+	$(CC) -o rb_test0 		rb_test0.c 	-DRB_DISABLE_MLOCK 	-DRB_DISABLE_RW_MUTEX 	-lrt -luuid
+	-./rb_test0
+	$(CC) -o rb_test0 		rb_test0.c 				-DRB_DISABLE_RW_MUTEX 	-DRB_DISABLE_SHM
+	-./rb_test0
+	$(CC) -o rb_test0 		rb_test0.c 	-DRB_DEFAULT_USE_SHM 	-lpthread 		-lrt -luuid
+	-./rb_test0
+	$(CC) -o rb_test0 		rb_test0.c 				-lpthread 		-lrt -luuid
+	-./rb_test0
+
+	$(CC) -o rb_test1 rb_test1.c -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM
+	$(CC) -o rb_test2 rb_test2.c -DRB_DISABLE_MLOCK -DRB_DISABLE_SHM -lpthread
+	$(CC) -o rb_test3 rb_test3.c -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM
+
+	$(CC) -o rb_shared_reader rb_shared_reader.c -lpthread -lrt -luuid
+	$(CC) -o rb_shared_writer rb_shared_writer.c -lpthread -lrt -luuid
 
 doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
 
