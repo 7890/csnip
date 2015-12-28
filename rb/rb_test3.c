@@ -1,4 +1,4 @@
-#include "rb.h"
+#include "rb_float.h"
 
 #define FLOAT_COUNT 8
 
@@ -7,9 +7,7 @@ int main()
 {
 	rb_t *rb=rb_new(FLOAT_COUNT*sizeof(float));
 	if(rb==NULL) {return 1;}
-	if(!rb_mlock(rb)) {return 1;}
 	rb_debug(rb);
-	if(!rb_munlock(rb)) {return 1;}
 
 	float floats[FLOAT_COUNT]={0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8};
 	size_t wrote=rb_write(rb,(char*)floats,FLOAT_COUNT*sizeof(float));
