@@ -26,10 +26,13 @@ rb:	rb.h rb_test0.c rb_test1.c rb_test2.c rb_test3.c rb_test4.c rb_shared_reader
 	$(CC) -o rb_test1 rb_test1.c -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM
 	$(CC) -o rb_test2 rb_test2.c -DRB_DISABLE_MLOCK -lrt -luuid -lpthread
 	$(CC) -o rb_test3 rb_test3.c -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM
+	#-DRB_DEFAULT_USE_SHM -lrt -luuid
 	$(CC) -o rb_test4 rb_test4.c -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM
 
 	$(CC) -o rb_shared_reader rb_shared_reader.c -lpthread -lrt -luuid
 	$(CC) -o rb_shared_writer rb_shared_writer.c -lpthread -lrt -luuid
+
+	$(CC) -o rb_show_fill rb_show_fill.c -lpthread -lrt -luuid -lm
 
 doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
 
@@ -55,4 +58,5 @@ clean:
 	-rm -f rb_test4
 	-rm -f rb_shared_reader
 	-rm -f rb_shared_writer
+	-rm -f rb_show_fill
 	-rm -rf doc
