@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	fprintf(stderr,"opening ringbuffer from shared memory:\n %s\n",argv[1]);
+	fprintf(stderr,"opening ringbuffer from shared memory:\n%s\n",argv[1]);
 
 	rb_=rb_open_shared(argv[1]);
 
