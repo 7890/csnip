@@ -37,7 +37,8 @@ void debug_linearbar(rb_t *rb, int sample_rate, int channel_count, int bytes_per
 		fprintf(stderr,"rb is NULL\n");
 		return;
 	}
-	int bar_ticks_count=40;
+
+	int bar_ticks_count=45;
 
 	size_t can_w=rb_can_write(rb);
 
@@ -116,10 +117,11 @@ int main(int argc, char *argv[])
 	fprintf(stderr,"%s\n",rb_shared_memory_handle(rb_));
 	if(sample_rate>0)
 	{
-		fprintf(stderr,"audio: %d channels @ %d Hz, %d bytes per sample\n"
+		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\n"
 			,channel_count
 			,sample_rate
 			,bytes_per_sample
+			,(float)rb_size(rb_)/bytes_per_sample/sample_rate/channel_count
 		);
 	}
 
