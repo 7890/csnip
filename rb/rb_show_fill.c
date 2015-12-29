@@ -30,7 +30,7 @@ void debug(rb_t *rb)
 }
 
 //=============================================================================
-void debug_linearbar(rb_t *rb, int sample_rate, int channel_count)
+void debug_linearbar(rb_t *rb, int sample_rate, int channel_count, int bytes_per_sample)
 {
 	if(rb==NULL)
 	{
@@ -69,7 +69,7 @@ void debug_linearbar(rb_t *rb, int sample_rate, int channel_count)
 			,fill_level==0 ? "_" : (fill_level==1 ? "^" : ">")
 			,(bar_ticks_count-bar_ticks_show)
 			,""
-			,(float)(rb_size(rb)-can_w)/sizeof(float)/sample_rate/channel_count
+			,(float)(rb_size(rb)-can_w)/bytes_per_sample/sample_rate/channel_count
 		);
 	}
 	else
@@ -97,10 +97,7 @@ int main(int argc, char *argv[])
 	if(argc<2)
 	{
 		fprintf(stderr,"need at least ringbuffer handle.\n");
-		fprintf(stderr,"syntax: <ringbuffer handle> (<sample rate> (<channel count>))\n");
-		fprintf(stderr,"if no sample rate given, indicate bytes.\n");
-		fprintf(stderr,"if sample rate given, indicate seconds.\n");
-		fprintf(stderr,"default channel count is 1.\n");
+		fprintf(stderr,"syntax: <ringbuffer handle>\n");
 		exit(1);
 	}
 
@@ -112,22 +109,24 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	int sample_rate=0;
-	int channel_count=1;
+	int sample_rate=rb_sample_rate(rb_);
+	int channel_count=rb_channel_count(rb_);
+	int bytes_per_sample=rb_bytes_per_sample(rb_);
 
-	if(argc>2)
+	fprintf(stderr,"%s\n",rb_shared_memory_handle(rb_));
+	if(sample_rate>0)
 	{
-		sample_rate=atoi(argv[2]);
-	}
-	if(argc>3)
-	{
-		channel_count=atoi(argv[3]);
+		fprintf(stderr,"audio: %d channels @ %d Hz, %d bytes per sample\n"
+			,channel_count
+			,sample_rate
+			,bytes_per_sample
+		);
 	}
 
 	while(1==1)
 	{
 //		debug(rb_);
-		debug_linearbar(rb_,sample_rate,channel_count);
+		debug_linearbar(rb_,sample_rate,channel_count,bytes_per_sample);
 		usleep(1000);
 	}
 

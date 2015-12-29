@@ -137,6 +137,11 @@ typedef struct
 				      !last_was_write corresponds to read operation accordingly (read pinter advanced). */
   int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
   int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm'.)*/
+
+  int sample_rate;		/**< \brief If ringbuffer is used as audio buffer, sample_rate is > 0.*/
+  int channel_count;		/**< \brief The number of channels stored in this buffer (interleaved).*/
+  int bytes_per_sample;		/**< \brief The number of bytes per audio sample.*/
+
   char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle. */
 
 #ifndef RB_DISABLE_RW_MUTEX
@@ -151,7 +156,10 @@ rb_t;
 static inline int rb_is_mlocked(rb_t *rb) {return rb->memory_locked;}
 static inline int rb_is_shared(rb_t *rb) {return rb->in_shared_memory;}
 static inline size_t rb_size(rb_t *rb){return rb->size;}
-static inline char *rb_get_shared_memory_handle(rb_t *rb) {return rb->shm_handle;}
+static inline char *rb_shared_memory_handle(rb_t *rb) {return rb->shm_handle;}
+static inline int rb_sample_rate(rb_t *rb) {return rb->sample_rate;}
+static inline int rb_channel_count(rb_t *rb) {return rb->channel_count;}
+static inline int rb_bytes_per_sample(rb_t *rb) {return rb->bytes_per_sample;}
 
 /**
  * Read and write regions are of type rb_region_t.
@@ -177,7 +185,9 @@ typedef struct
 rb_region_t;
 
 static inline rb_t *rb_new(size_t size);
+static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared(size_t size);
+static inline rb_t *rb_new_shared_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample);
 static inline void rb_free(rb_t *rb);
 static inline int rb_mlock(rb_t *rb);
 static inline int rb_munlock(rb_t *rb);
@@ -234,9 +244,19 @@ static inline void rb_print_regions(rb_t *rb);
 //=============================================================================
 static inline rb_t *rb_new(size_t size)
 {
+	return rb_new_audio(size,0,1,1);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample)
+{
+
 #ifndef RB_DISABLE_SHM
 	#ifdef RB_DEFAULT_USE_SHM
-		return rb_new_shared(size);
+		return rb_new_shared_audio(size,sample_rate,channel_count,bytes_per_sample);
 	#endif
 #endif
 	if(size<1) {return NULL;}
@@ -256,6 +276,9 @@ static inline rb_t *rb_new(size_t size)
 	rb->last_was_write=0;	
 	rb->memory_locked=0;
 	rb->in_shared_memory=0;
+	rb->sample_rate=sample_rate;
+	rb->channel_count=channel_count;
+	rb->bytes_per_sample=bytes_per_sample;
 
 #ifndef RB_DISABLE_RW_MUTEX
 	pthread_mutex_init ( &rb->read_lock, NULL);
@@ -293,6 +316,15 @@ static inline rb_t *rb_new(size_t size)
 //=============================================================================
 static inline rb_t *rb_new_shared(size_t size)
 {
+	return rb_new_shared_audio(size,0,1,1);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline rb_t *rb_new_shared_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample)
+{
 #ifdef RB_DISABLE_SHM
 	return NULL;
 #else
@@ -328,6 +360,9 @@ static inline rb_t *rb_new_shared(size_t size)
 	rb->last_was_write=0;	
 	rb->memory_locked=0;
 	rb->in_shared_memory=1;
+	rb->sample_rate=sample_rate;
+	rb->channel_count=channel_count;
+	rb->bytes_per_sample=bytes_per_sample;
 
 #ifndef RB_DISABLE_RW_MUTEX
 	pthread_mutexattr_init(&rb->mutex_attributes);
