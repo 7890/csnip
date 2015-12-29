@@ -107,8 +107,12 @@ See also rb_new_shared(). */
 	#include <uuid/uuid.h> //uuid_generate_time_safe
 #endif
 
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#define MIN(a,b) (((a)<(b))?(a):(b))
+#ifndef MAX
+	#define MAX(a,b) (((a)>(b))?(a):(b))
+#endif
+#ifndef MIN
+	#define MIN(a,b) (((a)<(b))?(a):(b))
+#endif
 
 /**
  * Ringbuffers are of type rb_t.
@@ -381,7 +385,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 
 	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
 
-	fprintf(stderr,"size %zu\n ",rb->size);
+//	fprintf(stderr,"size %zu\n",rb->size);
 	size_t size=rb->size;
 
 	//unmap and remap fully (knowing size now)
@@ -391,8 +395,8 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 
 	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
 
-	fprintf(stderr,"rb address %lu\n",(unsigned long int)rb);
-	fprintf(stderr,"buffer address %lu\n",(unsigned long int)buf_ptr(rb));
+//	fprintf(stderr,"rb address %lu\n",(unsigned long int)rb);
+//	fprintf(stderr,"buffer address %lu\n",(unsigned long int)buf_ptr(rb));
 
 	return rb;
 #endif
