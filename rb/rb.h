@@ -89,6 +89,7 @@ See also rb_new_shared(). */
 #include <string.h> //memcpy
 #include <sys/types.h> //size_t
 #include <stdio.h> //fprintf
+#include <math.h> //ceil
 
 #include <inttypes.h> //uint8_t
 
@@ -186,8 +187,10 @@ rb_region_t;
 
 static inline rb_t *rb_new(size_t size);
 static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared(size_t size);
 static inline rb_t *rb_new_shared_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_shared_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
 static inline void rb_free(rb_t *rb);
 static inline int rb_mlock(rb_t *rb);
 static inline int rb_munlock(rb_t *rb);
@@ -220,6 +223,9 @@ static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions);
 static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions);
 static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region);
 static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region);
+static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count);
+static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count);
+static inline size_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
 static inline int rb_try_exclusive_read(rb_t *rb);
 static inline void rb_release_read(rb_t *rb);
 static inline int rb_try_exclusive_write(rb_t *rb);
@@ -245,6 +251,16 @@ static inline void rb_print_regions(rb_t *rb);
 static inline rb_t *rb_new(size_t size)
 {
 	return rb_new_audio(size,0,1,1);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline rb_t *rb_new_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
+{
+	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
+	return rb_new_audio(size,sample_rate,channel_count, bytes_per_sample);
 }
 
 /**
@@ -317,6 +333,17 @@ static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count
 static inline rb_t *rb_new_shared(size_t size)
 {
 	return rb_new_shared_audio(size,0,1,1);
+}
+
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline rb_t *rb_new_shared_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
+{
+	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
+	return rb_new_shared_audio(size,sample_rate,channel_count, bytes_per_sample);
 }
 
 /**
@@ -1334,6 +1361,34 @@ static inline void *buf_ptr(const rb_t *rb)
 }
 
 /**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count)
+{
+	return count * rb->channel_count * rb->bytes_per_sample;	
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count)
+{
+	return (size_t)(count/rb->channel_count/rb->bytes_per_sample);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
+{
+	size_t frames=ceil(seconds*sample_rate);
+	return frames * channel_count * bytes_per_sample;
+}
+
+/**
 * Try to lock the ringbuffer for exclusive read.
 * Only one process can lock the ringbuffer for reading at a time.
 * Other processes can not read from the ringbuffer while it is locked.
@@ -1463,7 +1518,7 @@ static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_ind
 /**
 * \brief This is an alias to rb_drop().
 */
-static inline size_t rb_skip_all(rb_t *rb, size_t count) {return rb_drop(rb);}
+static inline size_t rb_skip_all(rb_t *rb) {return rb_drop(rb);}
 
 /**
 * \brief This is an alias to rb_overadvance_read_index().
