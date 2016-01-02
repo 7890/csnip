@@ -32,7 +32,7 @@ rb:	rb.h rb_test0.c rb_test1.c rb_test2.c rb_test3.c rb_test4.c rb_shared_reader
 	$(CC) -o rb_shared_reader rb_shared_reader.c -lpthread -lrt -luuid
 	$(CC) -o rb_shared_writer rb_shared_writer.c -lpthread -lrt -luuid
 
-	$(CC) -o rb_show_fill rb_show_fill.c -lpthread -lrt -luuid -lm
+	$(CC) -o rb_show_fill rb_show_fill.c -lpthread -lrt -luuid
 
 doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
 
