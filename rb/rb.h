@@ -115,6 +115,8 @@ See also rb_new_shared(). */
 	#define MIN(a,b) (((a)<(b))?(a):(b))
 #endif
 
+static char *bar_string="############################################################";
+
 /**
  * Ringbuffers are of type rb_t.
  * 
@@ -144,6 +146,7 @@ typedef struct
   int bytes_per_sample;		/**< \brief The number of bytes per audio sample.*/
 
   char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle. */
+  char human_name[256];		/**< \brief Name of buffer, alphanumeric. */
 
 #ifndef RB_DISABLE_RW_MUTEX
   pthread_mutexattr_t mutex_attributes;
@@ -158,6 +161,7 @@ static inline int rb_is_mlocked(rb_t *rb) {return rb->memory_locked;}
 static inline int rb_is_shared(rb_t *rb) {return rb->in_shared_memory;}
 static inline size_t rb_size(rb_t *rb){return rb->size;}
 static inline char *rb_shared_memory_handle(rb_t *rb) {return rb->shm_handle;}
+static inline char *rb_human_name(rb_t *rb) {return rb->human_name;}
 static inline int rb_sample_rate(rb_t *rb) {return rb->sample_rate;}
 static inline int rb_channel_count(rb_t *rb) {return rb->channel_count;}
 static inline int rb_bytes_per_sample(rb_t *rb) {return rb->bytes_per_sample;}
@@ -186,11 +190,14 @@ typedef struct
 rb_region_t;
 
 static inline rb_t *rb_new(size_t size);
-static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample);
-static inline rb_t *rb_new_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_named(size_t size, char *name);
+static inline rb_t *rb_new_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared(size_t size);
-static inline rb_t *rb_new_shared_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample);
-static inline rb_t *rb_new_shared_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_shared_named(size_t size, char *name);
+static inline rb_t *rb_new_shared_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_shared_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample);
+
 static inline void rb_free(rb_t *rb);
 static inline int rb_mlock(rb_t *rb);
 static inline int rb_munlock(rb_t *rb);
@@ -250,29 +257,37 @@ static inline void rb_print_regions(rb_t *rb);
 //=============================================================================
 static inline rb_t *rb_new(size_t size)
 {
-	return rb_new_audio(size,0,1,1);
+	return rb_new_audio(size,"anonymous",0,1,1);
 }
 
 /**
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_named(size_t size, char *name)
+{
+	return rb_new_audio(size,name,0,1,1);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline rb_t *rb_new_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
-	return rb_new_audio(size,sample_rate,channel_count, bytes_per_sample);
+	return rb_new_audio(size,name,sample_rate,channel_count, bytes_per_sample);
 }
 
 /**
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
-
 #ifndef RB_DISABLE_SHM
 	#ifdef RB_DEFAULT_USE_SHM
-		return rb_new_shared_audio(size,sample_rate,channel_count,bytes_per_sample);
+		return rb_new_shared_audio(size,name,sample_rate,channel_count,bytes_per_sample);
 	#endif
 #endif
 	if(size<1) {return NULL;}
@@ -295,6 +310,7 @@ static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count
 	rb->sample_rate=sample_rate;
 	rb->channel_count=channel_count;
 	rb->bytes_per_sample=bytes_per_sample;
+	strncpy(rb->human_name, name, 255);
 
 #ifndef RB_DISABLE_RW_MUTEX
 	pthread_mutex_init ( &rb->read_lock, NULL);
@@ -332,25 +348,33 @@ static inline rb_t *rb_new_audio(size_t size, int sample_rate, int channel_count
 //=============================================================================
 static inline rb_t *rb_new_shared(size_t size)
 {
-	return rb_new_shared_audio(size,0,1,1);
+	return rb_new_shared_audio(size,"anonymous",0,1,1);
 }
-
 
 /**
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared_audio_seconds(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_shared_named(size_t size, char *name)
+{
+	return rb_new_shared_audio(size,name,0,1,1);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline rb_t *rb_new_shared_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
-	return rb_new_shared_audio(size,sample_rate,channel_count, bytes_per_sample);
+	return rb_new_shared_audio(size,name,sample_rate,channel_count, bytes_per_sample);
 }
 
 /**
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared_audio(size_t size, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_shared_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 #ifdef RB_DISABLE_SHM
 	return NULL;
@@ -390,6 +414,7 @@ static inline rb_t *rb_new_shared_audio(size_t size, int sample_rate, int channe
 	rb->sample_rate=sample_rate;
 	rb->channel_count=channel_count;
 	rb->bytes_per_sample=bytes_per_sample;
+	strncpy(rb->human_name, name, 255);
 
 #ifndef RB_DISABLE_RW_MUTEX
 	pthread_mutexattr_init(&rb->mutex_attributes);
@@ -1466,7 +1491,7 @@ static inline void rb_release_write(rb_t *rb)
 * Print out information about ringbuffer to stderr.
 */
 //=============================================================================
-void rb_debug(rb_t *rb)
+static inline void rb_debug(rb_t *rb)
 {
 	if(rb==NULL)
 	{
@@ -1486,10 +1511,76 @@ void rb_debug(rb_t *rb)
 }
 
 /**
+* Print out information about rinbuffer including a bar graph to indicate
+* the buffer fill level.
+*/
+//=============================================================================
+static inline void rb_debug_linearbar(rb_t *rb)
+{
+	if(rb==NULL)
+	{
+		fprintf(stderr,"rb is NULL\n");
+		return;
+	}
+	fprintf(stderr,"%s: %s\n",rb->shm_handle, rb->human_name);
+	if(rb->sample_rate>0)
+	{
+		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\n"
+			,rb->channel_count
+			,rb->sample_rate
+			,rb->bytes_per_sample
+			,(float)rb->size/rb->bytes_per_sample/rb->sample_rate/rb->channel_count
+		);
+	}
+	int bar_ticks_count=45;
+	size_t can_w=rb_can_write(rb);
+	float fill_level;
+	if(can_w==0)
+	{
+		fill_level=1;
+	}
+	else if(can_w==rb->size)
+	{
+		fill_level=0;
+	}
+	else
+	{
+		fill_level=1-(float)can_w/rb->size;
+	}
+	int bar_ticks_show=fill_level*bar_ticks_count;
+	if(rb->sample_rate>0)
+	{
+		fprintf(stderr,"fill %.6f |%*.*s%s%*s| %9.3f s\n"
+			,fill_level
+			,bar_ticks_show
+			,bar_ticks_show
+			,bar_string
+			,fill_level==0 ? "_" : (fill_level==1 ? "^" : ">")
+			,(bar_ticks_count-bar_ticks_show)
+			,""
+			,(float)(rb->size-can_w)/rb->bytes_per_sample/rb->sample_rate/rb->channel_count
+		);
+	}
+	else
+	{
+		fprintf(stderr,"fill %.6f |%*.*s%s%*s| %10zu\n"
+			,fill_level
+			,bar_ticks_show
+			,bar_ticks_show
+			,bar_string
+			,fill_level==0 ? "_" : (fill_level==1 ? "^" : ">")
+			,(bar_ticks_count-bar_ticks_show)
+			,""
+			,rb->size-can_w
+		);
+	}
+}
+
+/**
 * Print out information about rinbuffer regions to stderr.
 */
 //=============================================================================
-void rb_print_regions(rb_t *rb)
+static inline void rb_print_regions(rb_t *rb)
 {
 	rb_region_t data[2];
 	rb_get_read_regions(rb,data);
