@@ -174,6 +174,7 @@ static inline size_t rb_read_next_midi_message(rb_t *rb, char *destination)
 	}
 	else
 	{
+		rb->total_underflows++;
 		return 0;
 	}
 }

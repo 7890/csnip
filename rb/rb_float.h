@@ -15,8 +15,8 @@ extern "C" {
 #include "rb.h"
 
 static inline size_t rb_read_float(rb_t *rb, float *destination);
-static inline size_t rb_peek_float(const rb_t *rb, float *destination);
-static inline size_t rb_peek_float_at(const rb_t *rb, float *destination, size_t offset);
+static inline size_t rb_peek_float(rb_t *rb, float *destination);
+static inline size_t rb_peek_float_at(rb_t *rb, float *destination, size_t offset);
 static inline size_t rb_skip_float(rb_t *rb);
 static inline size_t rb_write_float(rb_t *rb, const float *source);
 
@@ -32,10 +32,12 @@ static inline size_t rb_write_float(rb_t *rb, const float *source);
 //=============================================================================
 static inline size_t rb_read_float(rb_t *rb, float *destination)
 {
-	if(rb_can_read(rb)>=sizeof(float))
+	size_t can_read=rb_can_read(rb);
+	if(can_read>=sizeof(float))
 	{
 		return rb_read(rb,(char*)destination,sizeof(float));
 	}
+	rb->total_underflows++;
 	return 0;
 }
 
@@ -50,12 +52,13 @@ static inline size_t rb_read_float(rb_t *rb, float *destination)
  * @return the number of bytes read, which may be 0 or sizeof(float).
  */
 //=============================================================================
-static inline size_t rb_peek_float(const rb_t *rb, float *destination)
+static inline size_t rb_peek_float(rb_t *rb, float *destination)
 {
 	if(rb_can_read(rb)>=sizeof(float))
 	{
 		return rb_peek(rb,(char*)destination,sizeof(float));
 	}
+	rb->total_underflows++;
 	return 0;
 }
 
@@ -71,10 +74,14 @@ static inline size_t rb_peek_float(const rb_t *rb, float *destination)
  * @return the number of bytes read, which may be 0 or sizeof(float).
  */
 //=============================================================================
-static inline size_t rb_peek_float_at(const rb_t *rb, float *destination, size_t offset)
+static inline size_t rb_peek_float_at(rb_t *rb, float *destination, size_t offset)
 {
 	size_t can_read_count;
-	if((can_read_count=rb_can_read(rb))<offset+sizeof(float)) {return 0;}
+	if((can_read_count=rb_can_read(rb))<offset+sizeof(float))
+	{
+		rb->total_underflows++;
+		return 0;
+	}
 
 	return rb_peek_at(rb,(char*)destination,sizeof(float),offset);
 }
@@ -93,6 +100,7 @@ static inline size_t rb_skip_float(rb_t *rb)
 	{
 		return rb_advance_read_index(rb,sizeof(float));
 	}
+	rb->total_underflows++;
 	return 0;
 }
 
@@ -112,6 +120,7 @@ static inline size_t rb_write_float(rb_t *rb, const float *source)
 	{
 		return rb_write(rb,(char*)source,sizeof(float));
 	}
+	rb->total_overflows++;
 	return 0;
 }
 
