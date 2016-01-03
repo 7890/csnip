@@ -115,7 +115,7 @@ See also rb_new_shared(). */
 	#define MIN(a,b) (((a)<(b))?(a):(b))
 #endif
 
-static char *bar_string="############################################################";
+static char *bar_string="============================================================";
 
 /**
  * Ringbuffers are of type rb_t.
@@ -1641,7 +1641,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 	int bar_ticks_show=fill_level*bar_ticks_count;
 	if(rb->sample_rate>0)
 	{
-		fprintf(stderr,"fill %.6f |%*.*s%s%*s| %9.3f s\n"
+		fprintf(stderr,"fill %.6f [%*.*s%s%*s] %9.3f s\n"
 			,fill_level
 			,bar_ticks_show
 			,bar_ticks_show
@@ -1654,7 +1654,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 	}
 	else
 	{
-		fprintf(stderr,"fill %.6f |%*.*s%s%*s| %10zu\n"
+		fprintf(stderr,"fill %.6f [%*.*s%s%*s] %10zu\n"
 			,fill_level
 			,bar_ticks_show
 			,bar_ticks_show
