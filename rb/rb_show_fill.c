@@ -52,14 +52,40 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	int number_of_buffers=argc-1;
+
 	while(1==1)
 	{
 		//clear screen
 		fprintf(stderr,"\033[2J\033[1;1H");
+
 		for(i=0;i<argc-1;i++)
 		{
-			rb_debug_linearbar(rbs[i]);
-			fprintf(stderr,"\n");
+			//ignore unlinked
+			if(rbs[i]==NULL)
+			{
+				//ev. try "reconnect"? -> if same name used again
+				///rbs[i]=rb_open_shared(argv[i+1]);
+				continue;
+			}
+			//remove buffers requested to unlink
+			if(rb_is_unlink_requested(rbs[i]))
+			{
+				fprintf(stderr,"\nbuffer disappeared gracefully.\n");
+				rb_free(rbs[i]);
+				rbs[i]=NULL;
+				number_of_buffers--;
+				if(number_of_buffers<=0)
+				{
+					return;
+				}
+			}
+			//display buffer
+			else
+			{
+				rb_debug_linearbar(rbs[i]);
+				fprintf(stderr,"\n");
+			}
 		}
 		usleep(50000);
 	}

@@ -17,7 +17,7 @@
  * rb.h is part of a collection of C snippets which can be found here:
  * [https://github.com/7890/csnip](https://github.com/7890/csnip)
  *
- * Copyright (C) 2015 Thomas Brand
+ * Copyright (C) 2015 - 2016 Thomas Brand
  *
  * rb.h is derived from ringbuffer.c and ringbuffer.h in jack repository
  * [https://github.com/jackaudio/jack1](https://github.com/jackaudio/jack1)
@@ -141,6 +141,8 @@ typedef struct
   int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
   int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm'.)*/
 
+  int unlink_requested;		/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free())*/ 
+
   int no_more_input_data;	/**< \brief A writer can indicate that no more data will be put to the rinbuffer, i.e. the writer finished.*/
 
   int sample_rate;		/**< \brief If ringbuffer is used as audio buffer, sample_rate is > 0.*/
@@ -167,6 +169,8 @@ rb_t;
 //make struct memebers accessible via function
 static inline int rb_is_mlocked(rb_t *rb) {return rb->memory_locked;}
 static inline int rb_is_shared(rb_t *rb) {return rb->in_shared_memory;}
+static inline int rb_is_unlink_requested(rb_t *rb) {return rb->unlink_requested;}
+static inline void rb_request_unlink(rb_t *rb) {rb->unlink_requested=1;}
 static inline size_t rb_size(rb_t *rb){return rb->size;}
 static inline char *rb_shared_memory_handle(rb_t *rb) {return rb->shm_handle;}
 static inline char *rb_human_name(rb_t *rb) {return rb->human_name;}
@@ -344,6 +348,7 @@ static inline rb_t *rb_new_audio(size_t size, char *name, int sample_rate, int c
 	rb_set_common_init_values(rb);
 	rb->size=size;
 	rb->in_shared_memory=0;
+	rb->unlink_requested=0;
 	rb->sample_rate=sample_rate;
 	rb->channel_count=channel_count;
 	rb->bytes_per_sample=bytes_per_sample;
@@ -440,6 +445,7 @@ static inline rb_t *rb_new_shared_audio(size_t size, char *name, int sample_rate
 	rb_set_common_init_values(rb);
 	rb->size=size;
 	rb->in_shared_memory=1;
+	rb->unlink_requested=0;
 	rb->sample_rate=sample_rate;
 	rb->channel_count=channel_count;
 	rb->bytes_per_sample=bytes_per_sample;
@@ -525,6 +531,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 static inline void rb_free(rb_t *rb)
 {
 	if(rb==NULL) {return;}
+	rb->unlink_requested=1;
 #ifndef RB_DISABLE_MLOCK
 	if(rb->memory_locked)
 	{
