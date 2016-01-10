@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
 				number_of_buffers--;
 				if(number_of_buffers<=0)
 				{
-					return;
+					return 0;
 				}
 			}
 			//display buffer
