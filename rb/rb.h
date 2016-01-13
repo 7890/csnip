@@ -95,7 +95,7 @@ See also rb_new_shared(). */
 #include <string.h> //memcpy
 #include <sys/types.h> //size_t
 #include <stdio.h> //fprintf
-#include <math.h> //ceil
+#include <math.h> //ceil, floor
 
 #include <inttypes.h> //uint8_t
 
@@ -229,7 +229,9 @@ static inline size_t rb_size(rb_t *rb);
 static inline char *rb_get_shared_memory_handle(rb_t *rb);
 static inline void rb_reset(rb_t *rb);
 static inline size_t rb_can_read(const rb_t *rb);
+static inline size_t rb_can_read_frames(const rb_t *rb);
 static inline size_t rb_can_write(const rb_t *rb);
+static inline size_t rb_can_write_frames(const rb_t *rb);
 static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, int over);
 static inline size_t rb_read(rb_t *rb, char *destination, size_t count);
 static inline size_t rb_overread(rb_t *rb, char *destination, size_t count);
@@ -679,6 +681,15 @@ static inline size_t rb_can_read(const rb_t *rb)
 }
 
 /**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_can_read_frames(const rb_t *rb)
+{
+	return floor((double)rb_can_read(rb)/rb->channel_count/rb->bytes_per_sample);
+}
+
+/**
  * Return the number of bytes available for writing.
  *
  * This is the number of bytes in front of the write index up to the read index.
@@ -700,6 +711,15 @@ static inline size_t rb_can_write(const rb_t *rb)
 	}
 	else if(r<w) {return rb->size-w+r;}
 	else {return r-w;} //r>w
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_can_write_frames(const rb_t *rb)
+{
+	return floor((double)rb_can_write(rb)/rb->channel_count/rb->bytes_per_sample);
 }
 
 /**
@@ -1683,11 +1703,13 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 	fprintf(stderr,"%s (v%.3f): %s\n",rb->shm_handle,rb->version,rb->human_name);
 	if(rb->sample_rate>0)
 	{
-		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\n"
+		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\nmultichannel frames can read: %8zu can write: %8zu\n"
 			,rb->channel_count
 			,rb->sample_rate
 			,rb->bytes_per_sample
 			,(float)rb->size/rb->bytes_per_sample/rb->sample_rate/rb->channel_count
+			,rb_can_read_frames(rb)
+			,rb_can_write_frames(rb)
 		);
 	}
 

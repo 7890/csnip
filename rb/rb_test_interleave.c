@@ -53,10 +53,10 @@ int main()
 {
 	rb_t *rb=rb_new(100);//ITEM_COUNT*sizeof(float));
 	if(rb==NULL) {return 1;}
-	rb_debug(rb);
 
 	size_t wrote=rb_write(rb,bytes,ITEM_COUNT);
 	fprintf(stderr,"wrote %zu bytes\n",wrote);
+	rb_debug(rb);
 
 	unsigned char bytes_deinterleaved[4];
 
@@ -108,15 +108,13 @@ int main()
 
 	rb_free(rb);
 
-
-//3 channels
+	//audio, 3 channels
 	rb=rb_new_audio(ITEM_COUNT*sizeof(float),"audio",1000,3,sizeof(float));
 
 	if(rb==NULL) {return 1;}
-	rb_debug(rb);
-
 	wrote=rb_write(rb,(unsigned char *)floats,ITEM_COUNT*sizeof(float));
 	fprintf(stderr,"wrote %zu bytes (%zu floats)\n",wrote,wrote/sizeof(float));
+	rb_debug_linearbar(rb);
 
 	count=3; off=0;
 
