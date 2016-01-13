@@ -121,7 +121,7 @@ See also rb_new_shared(). */
 	#define MIN(a,b) (((a)<(b))?(a):(b))
 #endif
 
-static char *bar_string="============================================================";
+static const char *bar_string="============================================================";
 
 /**
  * Ringbuffers are of type rb_t.
@@ -212,13 +212,13 @@ rb_region_t;
 
 static inline void rb_set_common_init_values(rb_t *rb);
 static inline rb_t *rb_new(size_t size);
-static inline rb_t *rb_new_named(size_t size, char *name);
-static inline rb_t *rb_new_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample);
-static inline rb_t *rb_new_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_named(size_t size, const char *name);
+static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared(size_t size);
-static inline rb_t *rb_new_shared_named(size_t size, char *name);
-static inline rb_t *rb_new_shared_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample);
-static inline rb_t *rb_new_shared_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_shared_named(size_t size, const char *name);
+static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 
 static inline void rb_free(rb_t *rb);
 static inline int rb_mlock(rb_t *rb);
@@ -318,14 +318,15 @@ static inline void rb_set_common_init_values(rb_t *rb)
 //=============================================================================
 static inline rb_t *rb_new(size_t size)
 {
-	return rb_new_audio(size,"anonymous",0,1,1);
+	const char *a="anonymous";
+	return rb_new_audio(size,a,0,1,1);
 }
 
 /**
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_named(size_t size, char *name)
+static inline rb_t *rb_new_named(size_t size, const char *name)
 {
 	return rb_new_audio(size,name,0,1,1);
 }
@@ -334,7 +335,7 @@ static inline rb_t *rb_new_named(size_t size, char *name)
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
 	return rb_new_audio(size,name,sample_rate,channel_count, bytes_per_sample);
@@ -344,7 +345,7 @@ static inline rb_t *rb_new_audio_seconds(double seconds, char *name, int sample_
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 #ifndef RB_DISABLE_SHM
 	#ifdef RB_DEFAULT_USE_SHM
@@ -401,14 +402,15 @@ static inline rb_t *rb_new_audio(size_t size, char *name, int sample_rate, int c
 //=============================================================================
 static inline rb_t *rb_new_shared(size_t size)
 {
-	return rb_new_shared_audio(size,"anonymous",0,1,1);
+	const char *a="anonymous";
+	return rb_new_shared_audio(size,a,0,1,1);
 }
 
 /**
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared_named(size_t size, char *name)
+static inline rb_t *rb_new_shared_named(size_t size, const char *name)
 {
 	return rb_new_shared_audio(size,name,0,1,1);
 }
@@ -417,7 +419,7 @@ static inline rb_t *rb_new_shared_named(size_t size, char *name)
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared_audio_seconds(double seconds, char *name, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
 	return rb_new_shared_audio(size,name,sample_rate,channel_count, bytes_per_sample);
@@ -427,7 +429,7 @@ static inline rb_t *rb_new_shared_audio_seconds(double seconds, char *name, int 
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared_audio(size_t size, char *name, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 #ifdef RB_DISABLE_SHM
 	return NULL;
