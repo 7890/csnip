@@ -59,6 +59,12 @@
 extern "C" {
 #endif
 
+//the first few bytes in a rb_t data block
+static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
+//followed by version
+static const float RB_VERSION=0.2;
+
+
 //#define RB_DISABLE_MLOCK
 
 /**< If defined (without value), do NOT provide POSIX memory locking (see rb_mlock(), rb_munlock()).*/
@@ -133,6 +139,8 @@ static char *bar_string="=======================================================
  */
 typedef struct
 {
+  char magic[8];
+  float version;
   size_t size;			/**< \brief The size in bytes of the buffer as requested by caller. */
   volatile size_t read_index;	/**< \brief Absolute position (index) in the buffer for read operations. */
   volatile size_t write_index;	/**< \brief Abolute position (index) in the buffer for write operations. */
@@ -167,6 +175,7 @@ typedef struct
 rb_t;
 
 //make struct memebers accessible via function
+static inline int rb_version(rb_t *rb) {return rb->version;}
 static inline int rb_is_mlocked(rb_t *rb) {return rb->memory_locked;}
 static inline int rb_is_shared(rb_t *rb) {return rb->in_shared_memory;}
 static inline int rb_is_unlink_requested(rb_t *rb) {return rb->unlink_requested;}
@@ -261,6 +270,9 @@ static inline void rb_print_regions(const rb_t *rb);
 //=============================================================================
 static inline void rb_set_common_init_values(rb_t *rb)
 {
+	strncpy(rb->magic, RB_MAGIC, 8);
+	rb->version=RB_VERSION;
+
 	rb->write_index=0;
 	rb->read_index=0;
 	rb->last_was_write=0;
@@ -502,6 +514,22 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 	rb=(rb_t*)mmap(0, sizeof(rb_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 	if(rb==NULL || rb==MAP_FAILED) {return NULL;}
+
+	if(strncmp(rb->magic,RB_MAGIC,8))
+	{
+		fprintf(stderr,"MAGIC did not match! Was looking for '%s', found '%s'\n"
+			,RB_MAGIC,rb->magic);
+		munmap(rb,sizeof(rb_t));
+		return NULL;
+	}
+
+	if(rb->version != RB_VERSION)
+	{
+		fprintf(stderr,"Version mismatch! Was looking for '%.3f', found '%.3f'\n"
+			,RB_VERSION,rb->version);
+		munmap(rb,sizeof(rb_t));
+		return NULL;
+	}
 
 //	fprintf(stderr,"size %zu\n",rb->size);
 	size_t size=rb->size;
@@ -1605,7 +1633,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 		fprintf(stderr,"rb is NULL\n");
 		return;
 	}
-	fprintf(stderr,"%s: %s\n",rb->shm_handle, rb->human_name);
+	fprintf(stderr,"%s (v%.3f): %s\n",rb->shm_handle,rb->version,rb->human_name);
 	if(rb->sample_rate>0)
 	{
 		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\n"
