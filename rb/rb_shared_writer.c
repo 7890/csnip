@@ -46,8 +46,6 @@ static void *writer_thread_func(void *arg)
 			,content_length-write_total	//request to write all remaining bytes
 		);
 
-
-
 		//buffer to indicate which part of source buffer could be written
 		char buf_written[write+1];
 		buf_written[write]='\0';
@@ -87,24 +85,44 @@ int main(int argc, char *argv[])
 
 	if(argc<2)
 	{
-		fprintf(stderr,"need number: ringbuffer size [bytes]\n");
+		fprintf(stderr,"need number: ringbuffer size [bytes] OR shared memory handle\n");
 		exit(1);
 	}
 
-	int rb_size_request=atoi(argv[1]);
+	fprintf(stderr,"trying to attach ringbuffer in shared memory\n");
+	rb_=rb_open_shared(argv[1]);
 
-	fprintf(stderr,"creating new ringbuffer of size %d in shared memory\n",rb_size_request);
-	
-	rb_=rb_new_shared(rb_size_request);
-
-	if(rb_==NULL)
+	if(rb_!=NULL)
 	{
-		fprintf(stderr,"ringbuffer with size 0?\n");
+		goto _have_rb;
+	}
+
+	size_t arg=atoi(argv[1]);
+	//fprintf(stderr,"%zu\n",arg);
+	if(arg>0)
+	{
+		int rb_size_request=arg;
+
+		fprintf(stderr,"creating new ringbuffer of size %d in shared memory\n",rb_size_request);
+	
+		rb_=rb_new_shared(rb_size_request);
+
+		if(rb_==NULL)
+		{
+			fprintf(stderr,"ringbuffer with size 0?\n");
+			exit(1);
+		}
+
+		fprintf(stdout,"call rb_shared_reader with this handle:\n%s\n",rb_->shm_handle);
+		fflush(stdout);
+	}
+	else
+	{
+		fprintf(stderr,"error\n");
 		exit(1);
 	}
 
-	fprintf(stdout,"call rb_shared_reader with this handle:\n%s\n",rb_->shm_handle);
-	fflush(stdout);
+_have_rb:
 
 	rb_debug(rb_);
 
