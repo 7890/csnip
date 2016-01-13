@@ -62,7 +62,7 @@ extern "C" {
 //the first few bytes in a rb_t data block
 static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
 //followed by version
-static const float RB_VERSION=0.2;
+static const float RB_VERSION=0.21;
 
 
 //#define RB_DISABLE_MLOCK
@@ -244,6 +244,8 @@ static inline size_t rb_peek_byte(rb_t *rb, char *destination);
 static inline size_t rb_peek_byte_at(rb_t *rb, char *destination, size_t offset);
 static inline size_t rb_skip_byte(rb_t *rb);
 static inline size_t rb_write_byte(rb_t *rb, const char *source);
+static inline size_t rb_deinterleave_items(rb_t *rb, char *destination ,size_t item_count, size_t item_size, size_t initial_item_offset, size_t item_block_size);
+static inline size_t rb_deinterleave_audio(rb_t *rb, char *destination ,size_t frame_count, size_t frame_offset);
 static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int over);
 static inline size_t rb_advance_read_index(rb_t *rb, size_t count);
 static inline size_t rb_overadvance_read_index(rb_t *rb, size_t count);
@@ -1119,6 +1121,51 @@ static inline size_t rb_skip_byte(rb_t *rb)
 static inline size_t rb_write_byte(rb_t *rb, const char *source)
 {
 	return rb_write(rb,source,1);
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_deinterleave_items(rb_t *rb, char *destination
+	,size_t item_count, size_t item_size, size_t initial_item_offset, size_t item_block_size)
+{
+/*
+              offset
+              |                       |                       |                        |
+              0                       8                       16                       24 
+can_read min one channel: initial_offset * item_size + (item_count -1 ) * item_size * block_size + item_size)
+              |  |  |  |  |           |  |  |  |  |           |  |  |  |  |
+
+                          |absolute min read (less than requested)        |request satisfied
+                                                                                       |for all channels in block
+*/
+
+	size_t initial_bytepos=initial_item_offset * item_size;
+	size_t concerned_block_size=(item_count - 1) * item_size * item_block_size + item_size;
+
+	if(rb_can_read(rb) < initial_bytepos + concerned_block_size) {return 0;}
+
+	char *destination_ptr=destination;
+
+	size_t bytepos=0;
+	for(bytepos=0;bytepos < initial_bytepos + concerned_block_size;bytepos+=item_size * item_block_size)
+	{
+//		fprintf(stderr,"offset + bytepos: %zu\n",initial_bytepos+bytepos);
+		rb_peek_at(rb, destination_ptr,item_size,initial_bytepos+bytepos);
+		destination_ptr+=item_size;
+	}
+	return item_count*item_size;
+}
+
+/**
+ * n/a
+ */
+//=============================================================================
+static inline size_t rb_deinterleave_audio(rb_t *rb, char *destination ,size_t frame_count, size_t frame_offset)
+{
+	return rb_deinterleave_items(rb, destination
+		,frame_count, rb->bytes_per_sample, frame_offset, rb->channel_count);
 }
 
 /*
