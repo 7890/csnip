@@ -296,8 +296,8 @@ static inline void rb_set_common_init_values(rb_t *rb)
 		pthread_mutex_init(&rb->read_lock, &rb->mutex_attributes);
 		pthread_mutex_init(&rb->write_lock, &rb->mutex_attributes);
 	#else
-		pthread_mutex_init ( &rb->read_lock, NULL);
-		pthread_mutex_init ( &rb->write_lock, NULL);
+		pthread_mutex_init(&rb->read_lock, NULL);
+		pthread_mutex_init(&rb->write_lock, NULL);
 	#endif
 #endif
 }
@@ -449,7 +449,11 @@ static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sampl
 	if(fd<0) {return NULL;}
 
 	int r=ftruncate(fd,sizeof(rb_t) + size);
-	if(r!=0) {return NULL;}
+	if(r!=0)
+	{	close(fd);
+		shm_unlink(shm_handle);
+		return NULL;
+	}
 
 	//void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 	rb=(rb_t*)mmap(0, sizeof(rb_t) + size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -504,10 +508,6 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 	return NULL;
 #else
 	rb_t *rb;
-
-	//create rb_t in shared memory
-	uuid_t uuid;
-
 	//O_TRUNC | O_CREAT | 
 	int fd=shm_open(shm_handle,O_RDWR, 0666);
 	if(fd<0) {return NULL;}
@@ -525,6 +525,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 	{
 		fprintf(stderr,"MAGIC did not match! Was looking for '%s', found '%s'\n"
 			,RB_MAGIC,rb->magic);
+		close(fd);
 		munmap(rb,sizeof(rb_t));
 		return NULL;
 	}
@@ -533,6 +534,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 	{
 		fprintf(stderr,"Version mismatch! Was looking for '%.3f', found '%.3f'\n"
 			,RB_VERSION,rb->version);
+		close(fd);
 		munmap(rb,sizeof(rb_t));
 		return NULL;
 	}
