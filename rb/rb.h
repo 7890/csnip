@@ -526,7 +526,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 	if(rb==NULL || rb==MAP_FAILED)
 	{
 		close(fd);
-		shm_close(shm_handle);
+		shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -536,7 +536,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 			,RB_MAGIC,rb->magic);
 		close(fd);
 		munmap(rb,sizeof(rb_t));
-		shm_close(shm_handle);
+		shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -546,7 +546,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 			,RB_VERSION,rb->version);
 		close(fd);
 		munmap(rb,sizeof(rb_t));
-		shm_close(shm_handle);
+		shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -560,7 +560,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 
 	if(rb==NULL || rb==MAP_FAILED)
 	{
-		shm_close(shm_handle);
+		shm_unlink(shm_handle);
 		return NULL;
 	}
 
