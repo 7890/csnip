@@ -13,7 +13,7 @@ void hexdump (const char *desc, void *addr, int len)
 
 	// Output description if given.
 	if (desc != NULL)
-		printf ("%s:\n", desc);
+		printf ("%s\n", desc);
 
 	if (len == 0)
 	{
