@@ -1827,7 +1827,10 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 		fprintf(stderr,"rb is NULL\n");
 		return;
 	}
-	fprintf(stderr,"%s (v%.3f): %s\n",rb->shm_handle,rb->version,rb->human_name);
+	fprintf(stderr,"%s (v%.3f): %s\n"
+		,rb->in_shared_memory ? rb->shm_handle : "Ringbuffer"
+		,rb->version
+		,rb->human_name);
 	if(rb->sample_rate>0)
 	{
 		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\nmultichannel frames can read: %8zu can write: %8zu\n"
