@@ -2005,7 +2005,6 @@ digraph callgraph {
 "callgraph_of_functions_returning_rb_t" -> "rb_new" [style=solid];
 "callgraph_of_functions_returning_rb_t" -> "rb_new_named" [style=solid];
 "callgraph_of_functions_returning_rb_t" -> "rb_new_shared_named" [style=solid];
-"callgraph_of_functions_returning_rb_t" -> "rb_free" [style=solid];
 "callgraph_of_functions_returning_rb_t" -> "rb_new_shared_audio_seconds" [style=solid];
 "rb_new" -> "rb_new_audio" [style=solid];
 }
