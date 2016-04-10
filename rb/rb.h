@@ -86,9 +86,9 @@ Programs that include rb.h without setting RB_DISABLE_SHM need to link with '-lr
 See also rb_new_shared().*/
 
 #define RB_DEFAULT_USE_SHM
-/**< If defined (without value), ...new...() methods will implicitely use shared memory backed storage.
-Otherwise ...new...() methods will use malloc(), in private heap storage.
-See also ...new_shared...() methods.*/
+/**< If defined (without value), rb_new_(!shared)*() methods will implicitely use shared memory backed storage.
+Otherwise rb_new_(!shared)*() methods will use malloc(), in private heap storage.
+See also rb_new_shared_*() methods.*/
 #endif
 
 #include <stdlib.h> //malloc, free
@@ -1986,7 +1986,7 @@ static inline void rb_destroy(rb_t *rb)		{rb_free(rb);}
 
 /**
 \page call_graphs Call graphs
-\section cb_ret_rb_t Call graph of functions returning a pointer to an rb_t structure:
+\section cb_ret_rb_t Call graph of functions returning a pointer to an rb_t structure (RB_DEFAULT_USE_SHM undefined):
 \dot
 
 digraph callgraph {
@@ -2009,5 +2009,44 @@ digraph callgraph {
 "rb_new" -> "rb_new_audio" [style=solid];
 }
 \enddot
+*
+* The diagram above shows that any creation of a new rb_t will call either rb_new_audio() or rb_new_shared_audio().
+* The term 'audio' in the function doesn't mean it's only for audio.
+* However it can imply that some members of rb_t are left untouched if the ringbuffer is not used with audiosample data.
+* The overhead is possibly neglectable and depends mainly on the size of the ringbuffer.
+
+\section cb_ret_rb_t Call graph of functions returning a pointer to an rb_t structure (RB_DEFAULT_USE_SHM set):
+\dot
+
+digraph callgraph {
+"rb_new_named" -> "rb_new_audio" [style=solid];
+"rb_new_shared_named" -> "rb_new_shared_audio" [style=solid];
+"rb_new_shared_audio" -> "rb_set_common_init_values" [style=solid];
+"rb_new_shared_audio_seconds" -> "rb_second_to_byte_count" [style=solid];
+"rb_new_shared_audio_seconds" -> "rb_new_shared_audio" [style=solid];
+"rb_new_shared" -> "rb_new_shared_audio" [style=solid];
+"rb_new_audio" -> "rb_new_shared_audio" [style=solid];
+"rb_new_audio_seconds" -> "rb_new_audio" [style=solid];
+"rb_new_audio_seconds" -> "rb_second_to_byte_count" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_open_shared" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_shared" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_audio_seconds" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_named" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_shared_named" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_shared_audio_seconds" [style=solid];
+"rb_new" -> "rb_new_audio" [style=solid];
+}
+\enddot
+*
+* Notice that rb_new_audio is redirected to rb_new_shared_audio() in the graph above 
+* letting rb_new_shared_audio() handle any call to rb_new_*().
+*
+* Programs not explicitly calling rb_new_shared_*() but rb_new_(!shared)*() functions can be forced to 
+* use the rb_new_shared_*() functions by setting RB_DEFAULT_USE_SHM.
+* This allows to inspect the ringbuffer data for debugging purposes with external tools while the program using rb.h runs as normal.
+* For the program using rb.h it should make (almost?) no difference if the structure is created on the heap or in shared memory.
+* However the program inlcuding rb.h must set RB_DEFAULT_USE_SHM at compile time in order to enforce the implicit use of shared memory 
+* for newly created ringbuffers (brief: RB_DEFAULT_USE_SHM is not a runtime setting).
 */
 //EOF
