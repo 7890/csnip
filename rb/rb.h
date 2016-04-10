@@ -76,7 +76,7 @@ interoperability with other programs using (including at compile time) a previou
 /**< If defined (without value), do NOT provide read and write mutex locks.
 Programs that include rb.h without setting #RB_DISABLE_RW_MUTEX defined need to link with '-lphtread'.
 Not disabling doesn't mean that read and write operations are locked by default.
-A caller can use these methods to wrap read and write operations:
+A caller can use these functions to wrap read and write operations:
 See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write().*/
 
 #define RB_DISABLE_SHM
@@ -86,8 +86,8 @@ Programs that include rb.h without setting #RB_DISABLE_SHM need to link with '-l
 See also rb_new_shared().*/
 
 #define RB_DEFAULT_USE_SHM
-/**< If defined (without value), rb_new_(!shared)*() methods will implicitely use shared memory backed storage.
-Otherwise rb_new_(!shared)*() methods will use malloc(), in private heap storage.
+/**< If defined (without value), rb_new_(!shared)*() functions will implicitely use shared memory backed storage.
+Otherwise rb_new_(!shared)*() functions will use malloc(), in private heap storage.
 See also rb_new_shared_*() methods.*/
 #endif
 
@@ -124,7 +124,7 @@ static const char *bar_string="=================================================
  * Ringbuffers are of type rb_t.
  * 
  * The members of an rb_t struct must normally not be changed directly by a user of rb.h.
- * However it can be done, this is an open system. Not using the rb_* functions to operate
+ * However it can be done, this is an open system. Not using the rb_*() functions to operate
  * on rb_t will produce arbitrary results.
  *
  * Example use:
@@ -215,7 +215,7 @@ typedef struct
 {
   char  *buffer;	/**< \brief Pointer to location in main byte buffer. It correponds to a partial (segment)
 			      or full area of the main byte buffer in rb_t.*/
-  size_t size;		/**< \brief Count of bytes that can be read from the buffer.*/
+  size_t size;		/**< \brief Count of bytes that can be read from the buffer region.*/
 } 
 rb_region_t;
 
@@ -479,11 +479,11 @@ static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name
  *
  * Example to see what's going on in a small buffer:
  *
- * @code
- *	watch -d -n 0.1 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
- * @endcode
+\verbatim
+	watch -d -n 0.1 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
+\endverbatim
  *
- * The sourcecode repository of rb.h includes rb_show_fill.c which can be used 
+ * The source code repository of rb.h includes rb_show_fill.c which can be used 
  * to display properties and fill levels of one or more ringbuffers in shared memory 
  * identified via the UUID handle. see rb_debug_linearbar() or refer to 
  * 'rb_show_fill' for more information.
@@ -746,7 +746,7 @@ static inline void rb_reset(rb_t *rb)
 }
 
 /**
- * Return count of bytes available for reading.
+ * Return the count of bytes available for reading.
  *
  * This is count of bytes in front of the read index up to the write index.
  *
@@ -779,7 +779,7 @@ static inline size_t rb_can_read_frames(const rb_t *rb)
 }
 
 /**
- * Return count of bytes available for writing.
+ * Return the count of bytes available for writing.
  *
  * This is the number of bytes in front of the write index up to the read index.
  *
@@ -1367,8 +1367,9 @@ static inline size_t rb_overadvance_read_index(rb_t *rb, size_t count)
  * The count of the write index advance can be less than the requested
  * count, which is limited to rb_can_write() bytes.
  *
- * Advancing the write index without prior writing the involved bytes 
- * means leaving arbitrary data in the ringbuffer.
+ * Advancing the write index without prior writing the involved bytes
+ * means leaving arbitrary data or data that was written in the last "round"
+ * in the ringbuffer.
  *
  * @param rb pointer to the ringbuffer structure.
  * @param count count of bytes to advance.
@@ -1626,22 +1627,22 @@ _not_found:
  * to the buffer by offsetting it by sizeof(rb_t) since the buffer is allocated in the same chunk of memory
  * and attached directly after rb_t members. buf_ptr() does just that.
  *
- * @code
- *
- *->.------------- start of allocated space == start of rb_t
- *  |
- *  | rb_t "header"
- *  |
- *->|------ end of rb_t == start of buffer
- *  |
- *  | buffer (size bytes)
- *  |
- *  |
- *  |
- *  .------------- end of allocated space == end of buffer
- *
- * Total size = sizeof(rb_t) + size
- * @endcode
+\verbatim
+ ->.------------- start of allocated space == start of rb_t
+   |
+   | rb_t "header"
+   |
+ ->|------ end of rb_t == start of buffer
+   |
+   | buffer (size bytes)
+   |
+   |
+   |
+   .------------- end of allocated space == end of buffer
+
+ 
+  Total size = sizeof(rb_t) + size
+\endverbatim
  *
  * @param rb pointer to the ringbuffer structure.
  *
@@ -1774,13 +1775,13 @@ static inline void rb_release_write(rb_t *rb)
  * Print out brief information about ringbuffer to stderr.
  *
  * Example outputs:
- * @code
- * can read: 0 @ 0  can write: 1 @ 0 last was: read. mlock: no. shm: no. malloc()
- * 
- * can read: 0 @ 0  can write: 1 @ 0 last was: read. mlock: yes. shm: yes. 0a665956-fe9a-11e5-9718-74d435e313ae
- * @endcode
+\verbatim
+  can read: 0 @ 0  can write: 1 @ 0 last was: read. mlock: no. shm: no. malloc()
+  
+  can read: 0 @ 0  can write: 1 @ 0 last was: read. mlock: yes. shm: yes. 0a665956-fe9a-11e5-9718-74d435e313ae
+\endverbatim
  *
- * Also see 'rb_show_fill.c' included in the sourcecode repository of rb.h. 
+ * Also see 'rb_show_fill.c' included in the source code repository of rb.h. 
  */
 //=============================================================================
 static inline void rb_debug(const rb_t *rb)
@@ -1808,15 +1809,15 @@ static inline void rb_debug(const rb_t *rb)
  *
  * Example output:
  *
- * @code
- * 3882a050-fe7d-11e5-b075-74d435e313ae (v0.210): buffer 1
- * audio:   2 channels @  48000 Hz,  4 bytes per sample, capacity     1.900 s
- * multichannel frames can read:    39680 can write:    51520
- * r/w 0.832 w 1886208 r 1568768 d 317440 p 1568768 o 0 u 0 
- * fill 0.435088 [===================>                          ]     0.827 s
- * @endcode
+\verbatim
+  3882a050-fe7d-11e5-b075-74d435e313ae (v0.210): buffer 1
+  audio:   2 channels @  48000 Hz,  4 bytes per sample, capacity     1.900 s
+  multichannel frames can read:    39680 can write:    51520
+  r/w 0.832 w 1886208 r 1568768 d 317440 p 1568768 o 0 u 0 
+  fill 0.435088 [===================>                          ]     0.827 s
+\endverbatim
  *
- * Also see 'rb_show_fill.c' included in the sourcecode repository of rb.h. 
+ * Also see 'rb_show_fill.c' included in the source code repository of rb.h. 
  */
 //=============================================================================
 static inline void rb_debug_linearbar(const rb_t *rb)
@@ -1900,10 +1901,11 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 /**
  * ..............
  * Example outputs:
- * @code
- * @endcode
+\verbatim
+...
+\endverbatim
  *
- * Also see 'rb_show_fill.c' included in the sourcecode repository of rb.h. 
+ * Also see 'rb_show_fill.c' included in the source code repository of rb.h. 
  */
 //=============================================================================
 static inline void rb_print_regions(const rb_t *rb)
@@ -2038,7 +2040,7 @@ digraph callgraph {
 }
 \enddot
 *
-* Notice that rb_new_audio is redirected to rb_new_shared_audio() in the graph above 
+* Notice that rb_new_audio() is redirected to rb_new_shared_audio() in the graph above 
 * letting rb_new_shared_audio() handle any call to rb_new_*().
 *
 * Programs not explicitly calling rb_new_shared_*() but rb_new_(!shared)*() functions can be forced to 
