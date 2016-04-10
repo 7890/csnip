@@ -74,7 +74,7 @@ interoperability with other programs using (including at compile time) a previou
 
 #define RB_DISABLE_RW_MUTEX
 /**< If defined (without value), do NOT provide read and write mutex locks.
-Programs that include rb.h without setting RB_DISABLE_RW_MUTEX defined need to link with '-lphtread'.
+Programs that include rb.h without setting #RB_DISABLE_RW_MUTEX defined need to link with '-lphtread'.
 Not disabling doesn't mean that read and write operations are locked by default.
 A caller can use these methods to wrap read and write operations:
 See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write().*/
@@ -82,7 +82,7 @@ See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), r
 #define RB_DISABLE_SHM
 /**< If defined (without value), do NOT provide shared memory support.
 Files created in shared memory can normally be found under '/dev/shm/'.
-Programs that include rb.h without setting RB_DISABLE_SHM need to link with '-lrt -luuid'.
+Programs that include rb.h without setting #RB_DISABLE_SHM need to link with '-lrt -luuid'.
 See also rb_new_shared().*/
 
 #define RB_DEFAULT_USE_SHM
@@ -322,7 +322,7 @@ static inline void rb_set_common_init_values(rb_t *rb)
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * RB_DEFAULT_USE_SHM=1 is set at compile time in which case ..new_shared..()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case ..new_shared..()
  * methods will be called implicitely.
  *
  * @param size ringbuffer size in bytes, >0
@@ -344,7 +344,7 @@ static inline rb_t *rb_new(size_t size)
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * RB_DEFAULT_USE_SHM=1 is set at compile time in which case ..new_shared..()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case ..new_shared..()
  * methods will be called implicitely.
  *
  * @param size ringbuffer size in bytes, >0
@@ -366,7 +366,7 @@ static inline rb_t *rb_new_named(size_t size, const char *name)
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * RB_DEFAULT_USE_SHM=1 is set at compile time in which case ..new_shared..()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case ..new_shared..()
  * methods will be called implicitely.
  *
  * @param seconds duration [s] of audiosample data (with given properties) the ringbuffer can hold
@@ -390,7 +390,7 @@ static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int s
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * RB_DEFAULT_USE_SHM=1 is set at compile time in which case rb_new_shared_audio()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case rb_new_shared_audio()
  * will be called implicitely.
  *
  * @param size ringbuffer size in bytes, >0
@@ -2014,8 +2014,7 @@ digraph callgraph {
 * The term 'audio' in the function doesn't mean it's only for audio.
 * However it can imply that some members of rb_t are left untouched if the ringbuffer is not used with audiosample data.
 * The overhead is possibly neglectable and depends mainly on the size of the ringbuffer.
-
-\section cb_ret_rb_t Call graph of functions returning a pointer to an rb_t structure (RB_DEFAULT_USE_SHM set):
+\section cb_ret_rb_t_shm Call graph of functions returning a pointer to an rb_t structure (RB_DEFAULT_USE_SHM set):
 \dot
 
 digraph callgraph {
@@ -2043,10 +2042,10 @@ digraph callgraph {
 * letting rb_new_shared_audio() handle any call to rb_new_*().
 *
 * Programs not explicitly calling rb_new_shared_*() but rb_new_(!shared)*() functions can be forced to 
-* use the rb_new_shared_*() functions by setting RB_DEFAULT_USE_SHM.
+* use the rb_new_shared_*() functions by setting #RB_DEFAULT_USE_SHM.
 * This allows to inspect the ringbuffer data for debugging purposes with external tools while the program using rb.h runs as normal.
 * For the program using rb.h it should make (almost?) no difference if the structure is created on the heap or in shared memory.
-* However the program inlcuding rb.h must set RB_DEFAULT_USE_SHM at compile time in order to enforce the implicit use of shared memory 
-* for newly created ringbuffers (brief: RB_DEFAULT_USE_SHM is not a runtime setting).
+* However the program inlcuding rb.h must set #RB_DEFAULT_USE_SHM at compile time in order to enforce the implicit use of shared memory 
+* for newly created ringbuffers (brief: #RB_DEFAULT_USE_SHM is not a runtime setting).
 */
 //EOF
