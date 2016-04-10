@@ -1,4 +1,4 @@
-/** @file rb.h \mainpage
+/** @file rb.h \mainpage Introduction
  * rb.h -- A set of functions to work with lock-free ringbuffers.
  *
  * \image html drawing_ringbuffer_1_path.svg "Ringbuffer"
@@ -26,27 +26,28 @@
  * the authors this file (rb.h) was based on.
  *
  * Header from ringbuffer.c (jack_ringbuffer_t):
- * @code
- * Copyright (C) 2000 Paul Davis
- * Copyright (C) 2003 Rohan Drape
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU Lesser General Public License as published by
- * the Free Software Foundation; either version 2.1 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Lesser General Public License for more details.
+\verbatim
+Copyright (C) 2000 Paul Davis
+Copyright (C) 2003 Rohan Drape
 
- * You should have received a copy of the GNU Lesser General Public License
- * along with this program; if not, write to the Free Software 
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU Lesser General Public License as published by
+the Free Software Foundation; either version 2.1 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public License
+along with this program; if not, write to the Free Software 
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+
+ISO/POSIX C version of Paul Davis's lock free ringbuffer C++ code.
+This is safe for the case of one read thread and one write thread.
+\endverbatim
  *
- * ISO/POSIX C version of Paul Davis's lock free ringbuffer C++ code.
- * This is safe for the case of one read thread and one write thread.
- * @endcode
  */
 
 //EXPERIMENTAL CODE
@@ -59,37 +60,36 @@
 extern "C" {
 #endif
 
-//the first few bytes in a rb_t data block
 static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
-//followed by version
+/**< The first few bytes in a rb_t data block.*/
+
 static const float RB_VERSION=0.21;
+/**< Version of rb.h. Changing the rb.h binary data layout can cause the loss of 
+interoperability with other programs using (including at compile time) a previous version of rb.h.*/
 
-
-//#define RB_DISABLE_MLOCK
-
+//doxygen sets this to include normally unset preprocessor defines in the documentation
+#ifdef DOXYGEN
+#define RB_DISABLE_MLOCK
 /**< If defined (without value), do NOT provide POSIX memory locking (see rb_mlock(), rb_munlock()).*/
 
-//#define RB_DISABLE_RW_MUTEX
-
+#define RB_DISABLE_RW_MUTEX
 /**< If defined (without value), do NOT provide read and write mutex locks.
-Programs that include "rb.h" without setting RB_DISABLE_RW_MUTEX defined need to link with '-lphtread'.
+Programs that include rb.h without setting RB_DISABLE_RW_MUTEX defined need to link with '-lphtread'.
 Not disabling doesn't mean that read and write operations are locked by default.
 A caller can use these methods to wrap read and write operations:
-See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write(). */
+See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write().*/
 
-//#define RB_DISABLE_SHM
-
+#define RB_DISABLE_SHM
 /**< If defined (without value), do NOT provide shared memory support.
 Files created in shared memory can normally be found under '/dev/shm/'.
-Programs that include "rb.h" without setting RB_DISABLE_SHM need to link with '-lrt -luuid'.
-See also rb_new_shared(). */
+Programs that include rb.h without setting RB_DISABLE_SHM need to link with '-lrt -luuid'.
+See also rb_new_shared().*/
 
-//#define RB_DEFAULT_USE_SHM
-
-/**< If defined (without value), rb_new() will implicitely use shared memory backed storage.
-Otherwise rb_new() will use malloc(), in private heap storage.
-See also rb_new_shared(). */
-//#endif
+#define RB_DEFAULT_USE_SHM
+/**< If defined (without value), ...new...() methods will implicitely use shared memory backed storage.
+Otherwise ...new...() methods will use malloc(), in private heap storage.
+See also ...new_shared...() methods.*/
+#endif
 
 #include <stdlib.h> //malloc, free
 #include <string.h> //memcpy
@@ -114,14 +114,11 @@ See also rb_new_shared(). */
 	#include <uuid/uuid.h> //uuid_generate_time_safe
 #endif
 
-#ifndef MAX
-	#define MAX(a,b) (((a)>(b))?(a):(b))
-#endif
-#ifndef MIN
-	#define MIN(a,b) (((a)<(b))?(a):(b))
-#endif
+#define MAX(a,b) (((a)>(b))?(a):(b))
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 static const char *bar_string="============================================================";
+/**< Used in method rb_debug_linearbar() to indicate buffer fill level.*/
 
 /**
  * Ringbuffers are of type rb_t.
@@ -141,50 +138,62 @@ typedef struct
 {
   char magic[8];
   float version;
-  size_t size;			/**< \brief The size in bytes of the buffer as requested by caller. */
-  volatile size_t read_index;	/**< \brief Absolute position (index) in the buffer for read operations. */
-  volatile size_t write_index;	/**< \brief Abolute position (index) in the buffer for write operations. */
+  size_t size;			/**< \brief Size in bytes of the buffer as requested by caller.*/
+  volatile size_t read_index;	/**< \brief Absolute position (index) in the buffer for read operations.*/
+  volatile size_t write_index;	/**< \brief Abolute position (index) in the buffer for write operations.*/
   volatile int last_was_write;	/**< \brief Whether or not the last operation on the buffer was of type write (write index advanced).
-				      !last_was_write corresponds to read operation accordingly (read pinter advanced). */
-  int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps). */
-  int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm'.)*/
+				      !last_was_write corresponds to read operation accordingly (read pinter advanced).*/
+  int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps).*/
+  int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm').*/
 
-  int unlink_requested;		/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free())*/ 
+  int unlink_requested;		/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free()).*/ 
 
-  int no_more_input_data;	/**< \brief A writer can indicate that no more data will be put to the rinbuffer, i.e. the writer finished.*/
+  int no_more_input_data;	/**< \brief A writer can indicate that no more data will be put to the ringbuffer, i.e. the writer finished.*/
 
   int sample_rate;		/**< \brief If ringbuffer is used as audio buffer, sample_rate is > 0.*/
-  int channel_count;		/**< \brief The number of channels stored in this buffer (interleaved).*/
-  int bytes_per_sample;		/**< \brief The number of bytes per audio sample.*/
+  int channel_count;		/**< \brief Count of channels stored in this buffer (interleaved).*/
+  int bytes_per_sample;		/**< \brief Count of bytes per audio sample.*/
 
-  char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle. */
-  char human_name[256];		/**< \brief Name of buffer, alphanumeric. */
+  char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle.*/
+  char human_name[256];		/**< \brief Name of buffer, alphanumeric.*/
 
-  uint64_t total_bytes_read;	/**< \brief Total bytes read from this ringbuffer. Aadvancing the read index is iterpreted as read. Internal calls are also counted. rb_reset() will reset this value. */
-  uint64_t total_bytes_write;	/**< \brief Total bytes written to this ringbuffer. Advancing the write index is interpreted as write. Internal calls are also counted. rb_reset() will reset this value. */
-  uint64_t total_bytes_peek;	/**< \brief Total bytes peeked from this ringbuffer. rb_reset() will reset this value. */
-  uint64_t total_underflows;	/**< \brief Total underflow incidents (not bytes): could not read the requested amount of bytes. rb_reset() will reset this value. */
-  uint64_t total_overflows;	/**< \brief Total overflow incidents (not bytes): could not write the requested amount of bytes. rb_reset() will reset this value. */
+  uint64_t total_bytes_read;	/**< \brief Total bytes read from this ringbuffer. Aadvancing the read index is iterpreted as read. Internal calls are also counted. rb_reset() will reset this value.*/
+  uint64_t total_bytes_write;	/**< \brief Total bytes written to this ringbuffer. Advancing the write index is interpreted as write. Internal calls are also counted. rb_reset() will reset this value.*/
+  uint64_t total_bytes_peek;	/**< \brief Total bytes peeked from this ringbuffer. rb_reset() will reset this value.*/
+  uint64_t total_underflows;	/**< \brief Total underflow incidents (not bytes): could not read the requested amount of bytes. rb_reset() will reset this value.*/
+  uint64_t total_overflows;	/**< \brief Total overflow incidents (not bytes): could not write the requested amount of bytes. rb_reset() will reset this value.*/
 
 #ifndef RB_DISABLE_RW_MUTEX
   pthread_mutexattr_t mutex_attributes;
-  pthread_mutex_t read_lock;		/**< \brief Mutex lock for mutually exclusive read operations. */
-  pthread_mutex_t write_lock;		/**< \brief Mutex lock for mutually exclusive write operations. */
+  pthread_mutex_t read_lock;		/**< \brief Mutex lock for mutually exclusive read operations.*/
+  pthread_mutex_t write_lock;		/**< \brief Mutex lock for mutually exclusive write operations.*/
 #endif
 }
 rb_t;
 
 //make struct memebers accessible via function
+
+/** Access rb_t member 'version' via method.*/
 static inline int rb_version(rb_t *rb) {return rb->version;}
+/** Access rb_t member 'memory_locked' via method.*/
 static inline int rb_is_mlocked(rb_t *rb) {return rb->memory_locked;}
+/** Access rb_t member 'in_shared_memory' via method.*/
 static inline int rb_is_shared(rb_t *rb) {return rb->in_shared_memory;}
+/** Access rb_t member 'unlink_requested' via method.*/
 static inline int rb_is_unlink_requested(rb_t *rb) {return rb->unlink_requested;}
+/** Access rb_t member 'unlink_requested' via method.*/
 static inline void rb_request_unlink(rb_t *rb) {rb->unlink_requested=1;}
+/** Access rb_t member 'size' via method.*/
 static inline size_t rb_size(rb_t *rb){return rb->size;}
+/** Access rb_t member 'shm_handle' via method.*/
 static inline char *rb_shared_memory_handle(rb_t *rb) {return rb->shm_handle;}
+/** Access rb_t member 'human_name' via method.*/
 static inline char *rb_human_name(rb_t *rb) {return rb->human_name;}
+/** Access rb_t member 'sample_rate' via method.*/
 static inline int rb_sample_rate(rb_t *rb) {return rb->sample_rate;}
+/** Access rb_t member 'channel_count' via method.*/
 static inline int rb_channel_count(rb_t *rb) {return rb->channel_count;}
+/** Access rb_t member 'bytes_per_sample' via method.*/
 static inline int rb_bytes_per_sample(rb_t *rb) {return rb->bytes_per_sample;}
 
 /**
@@ -205,8 +214,8 @@ static inline int rb_bytes_per_sample(rb_t *rb) {return rb->bytes_per_sample;}
 typedef struct  
 {
   char  *buffer;	/**< \brief Pointer to location in main byte buffer. It correponds to a partial (segment)
-			      or full area of the main byte buffer in rb_t. */
-  size_t size;		/**< \brief Count of bytes that can be read from the buffer. */
+			      or full area of the main byte buffer in rb_t.*/
+  size_t size;		/**< \brief Count of bytes that can be read from the buffer.*/
 } 
 rb_region_t;
 
@@ -216,6 +225,7 @@ static inline rb_t *rb_new_named(size_t size, const char *name);
 static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared(size_t size);
+static inline rb_t *rb_open_shared(const char *shm_handle);
 static inline rb_t *rb_new_shared_named(size_t size, const char *name);
 static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
@@ -226,7 +236,7 @@ static inline int rb_munlock(rb_t *rb);
 static inline int rb_is_mlocked(rb_t *rb);
 static inline int rb_is_shared(rb_t *rb);
 static inline size_t rb_size(rb_t *rb);
-static inline char *rb_get_shared_memory_handle(rb_t *rb);
+static inline char *rb_shared_memory_handle(rb_t *rb);
 static inline void rb_reset(rb_t *rb);
 static inline size_t rb_can_read(const rb_t *rb);
 static inline size_t rb_can_read_frames(const rb_t *rb);
@@ -269,7 +279,7 @@ static inline void rb_debug_linearbar(const rb_t *rb);
 static inline void rb_print_regions(const rb_t *rb);
 
 /**
- * n/a
+ * Used internally while creating new instances of rb_t.
  */
 //=============================================================================
 static inline void rb_set_common_init_values(rb_t *rb)
@@ -289,6 +299,8 @@ static inline void rb_set_common_init_values(rb_t *rb)
 	rb->total_underflows=0;
 	rb->total_overflows=0;
 
+	rb->shm_handle[0]='\0';
+
 #ifndef RB_DISABLE_RW_MUTEX
 	#ifndef RB_DISABLE_SHM
 		pthread_mutexattr_init(&rb->mutex_attributes);
@@ -303,17 +315,19 @@ static inline void rb_set_common_init_values(rb_t *rb)
 }
 
 /**
- * Allocate a ringbuffer data structure of a specified size. The
- * caller must arrange for a call to rb_free() to release
+ * This is a wrapper to rb_new_audio().
+ *
+ * Allocate a ringbuffer data structure of a specified size.
+ * The caller must arrange for a call to rb_free() to release
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * RB_DEFAULT_USE_SHM=1 is set at compile time in which case rb_new_shared()
- * will be called implicitely.
+ * RB_DEFAULT_USE_SHM=1 is set at compile time in which case ..new_shared..()
+ * methods will be called implicitely.
  *
- * @param size the ringbuffer size in bytes, >0
+ * @param size ringbuffer size in bytes, >0
  *
- * @return a pointer to a new rb_t if successful; NULL otherwise.
+ * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
 static inline rb_t *rb_new(size_t size)
@@ -323,7 +337,20 @@ static inline rb_t *rb_new(size_t size)
 }
 
 /**
- * n/a
+ * This is a wrapper to rb_new_audio().
+ *
+ * Allocate a ringbuffer data structure of a specified size with a given name.
+ * The caller must arrange for a call to rb_free() to release
+ * the memory associated with the ringbuffer after use.
+ *
+ * The ringbuffer is allocated in heap memory with malloc() unless 
+ * RB_DEFAULT_USE_SHM=1 is set at compile time in which case ..new_shared..()
+ * methods will be called implicitely.
+ *
+ * @param size ringbuffer size in bytes, >0
+ * @param name name of the ringbuffer, less than 256 bytes (ASCII characters) long 
+ *
+ * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
 static inline rb_t *rb_new_named(size_t size, const char *name)
@@ -332,7 +359,23 @@ static inline rb_t *rb_new_named(size_t size, const char *name)
 }
 
 /**
- * n/a
+ * This is a wrapper to rb_new_audio().
+ *
+ * Allocate a ringbuffer data structure to be used with audiosample data with given properties.
+ * The caller must arrange for a call to rb_free() to release
+ * the memory associated with the ringbuffer after use.
+ *
+ * The ringbuffer is allocated in heap memory with malloc() unless 
+ * RB_DEFAULT_USE_SHM=1 is set at compile time in which case ..new_shared..()
+ * methods will be called implicitely.
+ *
+ * @param seconds duration [s] of audiosample data (with given properties) the ringbuffer can hold
+ * @param name name of the ringbuffer, less than 256 bytes (ASCII characters) long 
+ * @param sample_rate Sample rate of audiosample data (i.e. 48000)
+ * @param channel_count Count of interleaved channels in audiosample data
+ * @param bytes_per_sample Count of bytes per audiosample value of one channel (i.e. float sample: 4 bytes)
+ *
+ * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
 static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
@@ -342,7 +385,21 @@ static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int s
 }
 
 /**
- * n/a
+ * Allocate a ringbuffer data structure to be used with audiosample data with given properties.
+ * The caller must arrange for a call to rb_free() to release
+ * the memory associated with the ringbuffer after use.
+ *
+ * The ringbuffer is allocated in heap memory with malloc() unless 
+ * RB_DEFAULT_USE_SHM=1 is set at compile time in which case rb_new_shared_audio()
+ * will be called implicitely.
+ *
+ * @param size ringbuffer size in bytes, >0
+ * @param name name of the ringbuffer, less than 256 bytes (ASCII characters) long 
+ * @param sample_rate Sample rate of audiosample data (i.e. 48000)
+ * @param channel_count Count of interleaved channels in audiosample data
+ * @param bytes_per_sample Count of bytes per audiosample value of one channel (i.e. float sample: 4 bytes)
+ *
+ * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
 static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
@@ -374,30 +431,7 @@ static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate,
 }
 
 /**
- * Allocate a ringbuffer data structure of a specified size.
- *
- * The ringbuffer is allocated as a file in shared memory with a name similar to
- * 'b6310884-9938-11e5-bf8c-74d435e313ae'. Shared memory is normally visible in the
- * filesystem under /dev/shm/. The generated name ought to be unique (uuid) and 
- * can be accessed in rb_t as member ->shm_handle. 
- *
- * Ringbuffers allocated in shared memory can be accessed by other processes.
- *
- * Not calling rb_free() after use means to leave a file in /dev/shm/.
- * This can can be intentional or not.
- *
- * Inspecting a ringbuffer in /dev/shm/ for debug purposes can be done from a
- * shell using i.e. hexdump.
- *
- * Example to see what's going on in a small buffer:
- *
- * @code
- *	watch -d -n 0.1 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
- * @endcode
- *
- * @param size the ringbuffer size in bytes, >0
- *
- * @return a pointer to a new rb_t if successful; NULL otherwise.
+ * n/a
  */
 //=============================================================================
 static inline rb_t *rb_new_shared(size_t size)
@@ -426,8 +460,43 @@ static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name
 }
 
 /**
- * n/a
+ * Allocate a ringbuffer data structure to be used with audiosample data with given properties.
+ * The caller must arrange for a call to rb_free() to release
+ * the memory associated with the ringbuffer after use.
+ *
+ * The ringbuffer is allocated as a file in shared memory with a name similar to
+ * 'b6310884-9938-11e5-bf8c-74d435e313ae'. Shared memory is normally visible in the
+ * filesystem under /dev/shm/. The generated name ought to be unique (UUID) and 
+ * can be accessed via rb_shared_memory_handle(). 
+ *
+ * Ringbuffers allocated in shared memory can be accessed by other processes.
+ *
+ * Not calling rb_free() after use means to leave a file in /dev/shm/.
+ * This can can be intentional or not.
+ *
+ * Inspecting a ringbuffer in /dev/shm/ for debug purposes can be done from a
+ * shell using i.e. hexdump.
+ *
+ * Example to see what's going on in a small buffer:
+ *
+ * @code
+ *	watch -d -n 0.1 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
+ * @endcode
+ *
+ * The sourcecode repository of rb.h includes rb_show_fill.c which can be used 
+ * to display properties and fill levels of one or more ringbuffers in shared memory 
+ * identified via the UUID handle. see rb_debug_linearbar() or refer to 
+ * 'rb_show_fill' for more information.
+ *
+ * @param size ringbuffer size in bytes, >0
+ * @param name name of the ringbuffer, less than 256 bytes (ASCII characters) long 
+ * @param sample_rate Sample rate of audiosample data (i.e. 48000)
+ * @param channel_count Count of interleaved channels in audiosample data
+ * @param bytes_per_sample Count of bytes per audiosample value of one channel (i.e. float sample: 4 bytes)
+ *
+ * @return pointer to a new rb_t if successful; NULL otherwise.
  */
+
 //=============================================================================
 static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
@@ -465,10 +534,10 @@ static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sampl
 		return NULL;
 	}
 //	fprintf(stderr,"rb address %lu\n",(unsigned long int)rb);
-	memcpy(rb->shm_handle,shm_handle,37);
 //	fprintf(stderr,"buffer address %lu\n",(unsigned long int)buf_ptr(rb));
 
 	rb_set_common_init_values(rb);
+	memcpy(rb->shm_handle,shm_handle,37);
 	rb->size=size;
 	rb->in_shared_memory=1;
 	rb->unlink_requested=0;
@@ -492,18 +561,9 @@ static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sampl
  * Not calling rb_free() after use means to leave a file in /dev/shm/. This can be
  * intentional or not.
  *
- * Inspecting a ringbuffer in /dev/shm/ for debug purposes can be done from a
- * shell using i.e. hexdump.
+ * @param shm_handle handle (UUID) identifying the ringbuffer (without leading path to /dev/shm/) to open
  *
- * Example to see what's going on in a small buffer:
- *
- *@code
- *watch -d -n 0 hexdump -c /dev/shm/b6310884-9938-11e5-bf8c-74d435e313ae
- *@endcode
- *
- * @param shm_handle a name (uuid) identifying the ringbuffer (without leading path) to open
- *
- * @return a pointer to a new rb_t if successful; NULL otherwise.
+ * @return pointer to a previously created rb_t in shared memory if successful; NULL otherwise.
  */
 //=============================================================================
 static inline rb_t *rb_open_shared(const char *shm_handle)
@@ -576,7 +636,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
  *
  * Any active reader and/or writer should be done before calling rb_free().
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  */
 //=============================================================================
 static inline void rb_free(rb_t *rb)
@@ -610,10 +670,10 @@ static inline void rb_free(rb_t *rb)
  * Lock a ringbuffer data block into memory.
  *
  * Uses the mlock() system call.
- * 
+ *
  * This is not a realtime operation.
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
  * @return 1 if successful; 0 otherwise.
  */
@@ -633,10 +693,10 @@ static inline int rb_mlock(rb_t *rb)
  * Unlock a previously locked ringbuffer data block in memory.
  *
  * Uses the munlock() system call.
- * 
+ *
  * This is not a realtime operation.
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
  * @return 1 if successful; 0 otherwise.
  */
@@ -653,7 +713,11 @@ static inline int rb_munlock(rb_t *rb)
 }
 
 /**
- * n/a
+ * Reset statistics associated with this ringbuffer:
+ *
+ * 'total_bytes_read', 'total_bytes_write', 'total_bytes_peek', 'total_underflows', 'total_overflows'
+ *
+ * @param rb pointer to the ringbuffer structure.
  */
 //=============================================================================
 static inline void rb_reset_stats(rb_t *rb)
@@ -666,11 +730,11 @@ static inline void rb_reset_stats(rb_t *rb)
 }
 
 /**
- * Reset the read and write indices, making an empty buffer.
+ * Reset the read and write indices and statistics, making an empty buffer.
  *
  * Any active reader and/or writer should be done before calling rb_reset().
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  */
 //=============================================================================
 static inline void rb_reset(rb_t *rb)
@@ -682,13 +746,13 @@ static inline void rb_reset(rb_t *rb)
 }
 
 /**
- * Return the number of bytes available for reading.
+ * Return count of bytes available for reading.
  *
- * This is the number of bytes in front of the read index up to the write index.
+ * This is count of bytes in front of the read index up to the write index.
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
- * @return the number of bytes available to read.
+ * @return count of bytes available to read.
  */
 //=============================================================================
 static inline size_t rb_can_read(const rb_t *rb)
@@ -715,13 +779,13 @@ static inline size_t rb_can_read_frames(const rb_t *rb)
 }
 
 /**
- * Return the number of bytes available for writing.
+ * Return count of bytes available for writing.
  *
  * This is the number of bytes in front of the write index up to the read index.
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
- * @return the amount of free space (in bytes) available for writing.
+ * @return amount of free space (in bytes) available for writing.
  */
 //=============================================================================
 static inline size_t rb_can_write(const rb_t *rb)
@@ -818,12 +882,12 @@ static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, 
  * The count of bytes effectively read can be less than the requested
  * count, which is limited to rb_can_read() bytes.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a buffer where data read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a buffer where data read from the
  * ringbuffer will be copied to.
- * @param count the number of bytes to read.
+ * @param count count of bytes to read.
  *
- * @return the number of bytes read, which may range from 0 to count.
+ * @return count of bytes read, which may range from 0 to count.
  */
 //=============================================================================
 static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
@@ -838,7 +902,7 @@ static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
  * If the read goes beyond the write index the write index will be set 
  * equal to the resulting read index of this function. A writer will 
  * see the buffer having a write capacity equal to the buffer size.
- * 
+ *
  * Since rb_overread() could move the write index, it should be called
  * only if there is no ongoing rb_write operation.
  *
@@ -847,12 +911,12 @@ static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
  * The count of bytes effectively read can be less than the requested
  * count, which is limited to rb_size() bytes.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a buffer where data read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a buffer where data read from the
  * ringbuffer will be copied to.
- * @param count the number of bytes to read.
+ * @param count count of bytes to read.
  *
- * @return the number of bytes read, which may range from 0 to rb_size().
+ * @return count of bytes read, which may range from 0 to rb_size().
  */
 //=============================================================================
 static inline size_t rb_overread(rb_t *rb, char *destination, size_t count)
@@ -867,11 +931,11 @@ static inline size_t rb_overread(rb_t *rb, char *destination, size_t count)
  * The count of bytes effectively written can be less than the requested
  * count, which is limited to rb_can_write() bytes.
  * 
- * @param rb a pointer to the ringbuffer structure.
- * @param source a pointer to the data to be written to the ringbuffer.
- * @param count the number of bytes to write.
+ * @param rb pointer to the ringbuffer structure.
+ * @param source pointer to the data to be written to the ringbuffer.
+ * @param count count of bytes to write.
  *
- * @return the number of bytes written, which may range from 0 to count
+ * @return count of bytes written, which may range from 0 to count
  */
 //=============================================================================
 static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
@@ -929,12 +993,12 @@ static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
  * The count of bytes effectively read can be less than the requested
  * count, which is limited to rb_can_read() bytes.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a buffer where data read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a buffer where data read from the
  * ringbuffer will be copied to.
- * @param count the number of bytes to read.
+ * @param count count of bytes to read.
  *
- * @return the number of bytes read, which may range from 0 to count.
+ * @return count of bytes read, which may range from 0 to count.
  */
 //=============================================================================
 static inline size_t rb_peek(rb_t *rb, char *destination, size_t count)
@@ -953,13 +1017,13 @@ static inline size_t rb_peek(rb_t *rb, char *destination, size_t count)
  * The count of bytes effectively read can be less than the requested
  * count, which is limited to rb_can_read() bytes.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a buffer where data read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a buffer where data read from the
  * ringbuffer will be copied to.
- * @param count the number of bytes to read.
- * @param offset the number of bytes to skip at the start of readable ringbuffer data.
+ * @param count count of bytes to read.
+ * @param offset count of bytes to skip at the start of readable ringbuffer data.
  *
- * @return the number of bytes read, which may range from 0 to count.
+ * @return count of bytes read, which may range from 0 to count.
  */
 //=============================================================================
 static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_t offset)
@@ -1023,9 +1087,9 @@ static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_
  * This moves the read index up to the current write index
  * (nothing left to read) using rb_advance_read_index().
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
- * @return the number of bytes dropped, which may range from 0 to rb->size.
+ * @return count of bytes dropped, which may range from 0 to rb->size.
  */
 //=============================================================================
 static inline size_t rb_drop(rb_t *rb)
@@ -1039,9 +1103,9 @@ static inline size_t rb_drop(rb_t *rb)
  * offset variable provided by the caller. The index is relative to
  * the start of the ringbuffer's readable space.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param byte the byte to search in the ringbuffer's readable space
- * @param offset a pointer to a size_t variable
+ * @param rb pointer to the ringbuffer structure.
+ * @param byte byte to search in the ringbuffer's readable space
+ * @param offset pointer to a size_t variable
  *
  * @return 1 if found; 0 otherwise.
  */
@@ -1071,11 +1135,11 @@ static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset)
  *
  * This is a copying data reader.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a variable where the byte read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a variable where the byte read from the
  * ringbuffer will be copied to.
  *
- * @return the number of bytes read, which may range from 0 to 1.
+ * @return count of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
 static inline size_t rb_read_byte(rb_t *rb, char *destination)
@@ -1087,11 +1151,11 @@ static inline size_t rb_read_byte(rb_t *rb, char *destination)
  * Peek one byte from the ringbuffer (don't move the read index).
  * This is a copying data reader.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a variable where the byte read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a variable where the byte read from the
  * ringbuffer will be copied to.
  *
- * @return the number of bytes read, which may range from 0 to 1.
+ * @return count of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
 static inline size_t rb_peek_byte(rb_t *rb, char *destination)
@@ -1103,12 +1167,12 @@ static inline size_t rb_peek_byte(rb_t *rb, char *destination)
  * Peek one byte from the ringbuffer at the given offset (don't move the read index).
  * This is a copying data reader.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param destination a pointer to a variable where the byte read from the
+ * @param rb pointer to the ringbuffer structure.
+ * @param destination pointer to a variable where the byte read from the
  * ringbuffer will be copied to.
- * @param offset the number of bytes to skip at the start of readable ringbuffer data.
+ * @param offset count of bytes to skip at the start of readable ringbuffer data.
  *
- * @return the number of bytes read, which may range from 0 to 1.
+ * @return count of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
 static inline size_t rb_peek_byte_at(rb_t *rb, char *destination, size_t offset)
@@ -1141,9 +1205,9 @@ static inline size_t rb_peek_byte_at(rb_t *rb, char *destination, size_t offset)
  * This advances the read index by one byte if at least one byte
  * is available in the ringbuffer's readable space.
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
- * @return the number of bytes skipped, which may range from 0 to 1.
+ * @return count of bytes skipped, which may range from 0 to 1.
  */
 //=============================================================================
 static inline size_t rb_skip_byte(rb_t *rb)
@@ -1156,11 +1220,11 @@ static inline size_t rb_skip_byte(rb_t *rb)
  * This advances the write index by one byte if at least one byte
  * can be written to the ringbuffer's writable space.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param source a pointer to the variable containing the byte to be written
+ * @param rb pointer to the ringbuffer structure.
+ * @param source pointer to the variable containing the byte to be written
  * to the ringbuffer.
  *
- * @return the number of bytes written, which may range from 0 to 1.
+ * @return count of bytes written, which may range from 0 to 1.
  */
 //=============================================================================
 static inline size_t rb_write_byte(rb_t *rb, const char *source)
@@ -1213,9 +1277,9 @@ static inline size_t rb_deinterleave_audio(rb_t *rb, char *destination ,size_t f
 		,frame_count, rb->bytes_per_sample, frame_offset, rb->channel_count);
 }
 
-/*
-* n/a
-*/
+/**
+ * n/a
+ */
 //=============================================================================
 static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int over)
 {
@@ -1272,10 +1336,10 @@ static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int o
  * Advancing the read index without prior reading the involved bytes 
  * means dropping/ignoring data.
  * 
- * @param rb a pointer to the ringbuffer structure.
- * @param count the number of bytes to advance.
+ * @param rb pointer to the ringbuffer structure.
+ * @param count count of bytes to advance.
  *
- * @return the number of bytes advanced, which may range from 0 to count.
+ * @return count of bytes advanced, which may range from 0 to count.
  */
 //=============================================================================
 static inline size_t rb_advance_read_index(rb_t *rb, size_t count)
@@ -1283,7 +1347,7 @@ static inline size_t rb_advance_read_index(rb_t *rb, size_t count)
 	return rb_generic_advance_read_index(rb,count,0);
 }
 
-/*
+/**
 * n/a
 */
 //=============================================================================
@@ -1306,10 +1370,10 @@ static inline size_t rb_overadvance_read_index(rb_t *rb, size_t count)
  * Advancing the write index without prior writing the involved bytes 
  * means leaving arbitrary data in the ringbuffer.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param count the number of bytes to advance.
+ * @param rb pointer to the ringbuffer structure.
+ * @param count count of bytes to advance.
  *
- * @return the number of bytes advanced, which may range from 0 to count
+ * @return count of bytes advanced, which may range from 0 to count
  */
 //=============================================================================
 static inline size_t rb_advance_write_index(rb_t *rb, size_t count)
@@ -1358,8 +1422,8 @@ static inline size_t rb_advance_write_index(rb_t *rb, size_t count)
  * If data was read this way, the caller must manually advance the read
  * index accordingly using rb_advance_read_index().
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param regions a pointer to a 2 element array of rb_region_t.
+ * @param rb pointer to the ringbuffer structure.
+ * @param regions pointer to a 2 element array of rb_region_t.
  *
  */
 //=============================================================================
@@ -1409,8 +1473,8 @@ static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions)
  * If data was written this way, the caller must manually advance the write
  * index accordingly using rb_advance_write_index().
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param regions a pointer to a 2 element array of rb_region_t.
+ * @param rb pointer to the ringbuffer structure.
+ * @param regions pointer to a 2 element array of rb_region_t.
  */
 //=============================================================================
 static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions)
@@ -1438,16 +1502,16 @@ static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions)
 }
 
 /**
-* This function is similar to rb_get_write_regions().
-* Opposed to rb_get_write_regions(), it will only return the first (next) region
-* instead of an array of two regions. The region is returned to the caller by 
-* setting the rb_region_t variable provided by the caller.
-* If data was read using the provided pointer and size in rb_region_t, the read
-* index must be manually advanced using rb_advance_read_index().
-*
-* @param rb a pointer to the ringbuffer structure.
-* @param region a pointer to a variable of type rb_region_t.
-*/
+ * This function is similar to rb_get_write_regions().
+ * Opposed to rb_get_write_regions(), it will only return the first (next) region
+ * instead of an array of two regions. The region is returned to the caller by 
+ * setting the rb_region_t variable provided by the caller.
+ * If data was read using the provided pointer and size in rb_region_t, the read
+ * index must be manually advanced using rb_advance_read_index().
+ *
+ * @param rb pointer to the ringbuffer structure.
+ * @param region pointer to a variable of type rb_region_t.
+ */
 //=============================================================================
 static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region)
 {
@@ -1467,16 +1531,16 @@ static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region)
 	}
 }
 /**
-* This function is similar to rb_get_read_regions().
-* Opposed to rb_get_read_regions(), it will only return the first (next) region
-* instead of an array of two regions. The region is returned to the caller by 
-* setting the rb_region_t variable provided by the caller.
-* If data was written using the provided pointer and size in rb_region_t, the write
-* index must be manually advanced using rb_advance_write_index().
-*
-* @param rb a pointer to the ringbuffer structure.
-* @param region a pointer to a variable of type rb_region_t.
-*/
+ * This function is similar to rb_get_read_regions().
+ * Opposed to rb_get_read_regions(), it will only return the first (next) region
+ * instead of an array of two regions. The region is returned to the caller by 
+ * setting the rb_region_t variable provided by the caller.
+ * If data was written using the provided pointer and size in rb_region_t, the write
+ * index must be manually advanced using rb_advance_write_index().
+ *
+ * @param rb pointer to the ringbuffer structure.
+ * @param region pointer to a variable of type rb_region_t.
+ */
 //=============================================================================
 static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region)
 {
@@ -1502,11 +1566,11 @@ static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region)
  * offset variable provided by the caller. The index is relative to
  * the start of the ringbuffer's readable space.
  *
- * @param rb a pointer to the ringbuffer structure.
- * @param pattern the byte sequence to search in the ringbuffer's readable space
- * @param pattern_offset the offset to apply to the byte sequence
- * @param count the count of bytes to consider for matching in the byte sequence, starting from offset
- * @param offset a pointer to a size_t variable
+ * @param rb pointer to the ringbuffer structure.
+ * @param pattern byte sequence to search in the ringbuffer's readable space
+ * @param pattern_offset offset to apply to the byte sequence
+ * @param count count of bytes to consider for matching in the byte sequence, starting from offset
+ * @param offset pointer to a size_t variable
  *
  * @return 1 if found; 0 otherwise.
  */
@@ -1579,9 +1643,9 @@ _not_found:
  * Total size = sizeof(rb_t) + size
  * @endcode
  *
- * @param rb a pointer to the ringbuffer structure.
+ * @param rb pointer to the ringbuffer structure.
  *
- * @return a pointer to the data buffer of this rb_t.
+ * @return pointer to the data buffer of this rb_t.
  */
 static inline void *buf_ptr(const rb_t *rb)
 {
@@ -1589,7 +1653,12 @@ static inline void *buf_ptr(const rb_t *rb)
 }
 
 /**
- * n/a
+ * Return the byte count for a given (multichannel) frame count using the audiosample data 
+ * properties associated with the given ringbuffer.
+ *
+ * @param rb pointer to the ringbuffer structure.
+ *
+ * @return count of bytes corresponding to the given multichannel frame count.
  */
 //=============================================================================
 static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count)
@@ -1598,7 +1667,12 @@ static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count)
 }
 
 /**
- * n/a
+ * Return the (multichannel) frame count for a given byte count using the audiosample data 
+ * properties associated with the given ringbuffer.
+ *
+ * @param rb pointer to the ringbuffer structure.
+ *
+ * @return count of multichannel frames corresponding to the given byte count.
  */
 //=============================================================================
 static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count)
@@ -1607,7 +1681,13 @@ static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count)
 }
 
 /**
- * n/a
+ * Convert seconds to a byte count using the given audiosample data properties.
+ * 
+ * @param sample_rate Sample rate of audiosample data (i.e. 48000)
+ * @param channel_count Count of interleaved channels in audiosample data
+ * @param bytes_per_sample Count of bytes per audiosample value of one channel (i.e. float sample: 4 bytes)
+ *
+ * @return duration [s] of audio corresponding to the given audiosample data properties.
  */
 //=============================================================================
 static inline size_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
@@ -1617,16 +1697,16 @@ static inline size_t rb_second_to_byte_count(double seconds, int sample_rate, in
 }
 
 /**
-* Try to lock the ringbuffer for exclusive read.
-* Only one process can lock the ringbuffer for reading at a time.
-* Other processes can not read from the ringbuffer while it is locked.
-* A process that successfully locks the ringbuffer must arrange for a call
-* to rb_release_read() when the lock is not needed any longer.
-*
-* @param rb a pointer to the ringbuffer structure.
-*
-* @return 1 if locked; 0 otherwise.
-*/
+ * Try to lock the ringbuffer for exclusive read.
+ * Only one process can lock the ringbuffer for reading at a time.
+ * Other processes can not read from the ringbuffer while it is locked.
+ * A process that successfully locks the ringbuffer must arrange for a call
+ * to rb_release_read() when the lock is not needed any longer.
+ *
+ * @param rb pointer to the ringbuffer structure.
+ *
+ * @return 1 if locked; 0 otherwise.
+ */
 //=============================================================================
 static inline int rb_try_exclusive_read(rb_t *rb)
 {
@@ -1639,12 +1719,12 @@ static inline int rb_try_exclusive_read(rb_t *rb)
 }
 
 /**
-* Release a previously acquired write lock with rb_try_exclusive_write().
-*
-* Only processes that successfully locked the ringbuffer previously are allowed to call this function.
-*
-* @param rb a pointer to the ringbuffer structure.
-*/
+ * Release a previously acquired write lock with rb_try_exclusive_write().
+ *
+ * Only processes that successfully locked the ringbuffer previously are allowed to call this function.
+ *
+ * @param rb pointer to the ringbuffer structure.
+ */
 //=============================================================================
 static inline void rb_release_read(rb_t *rb)
 {
@@ -1654,16 +1734,16 @@ static inline void rb_release_read(rb_t *rb)
 }
 
 /**
-* Try to lock the ringbuffer for exclusive write.
-* Only one process can lock the ringbuffer for reading at a time.
-* Other processes can not read from the ringbuffer while it is locked.
-* A process that successfully locks the ringbuffer must arrange for a call
-* to rb_release_write() when the lock is not needed any longer.
-*
-* @param rb a pointer to the ringbuffer structure.
-*
-* @return 1 if locked; 0 otherwise.
-*/
+ * Try to lock the ringbuffer for exclusive write.
+ * Only one process can lock the ringbuffer for reading at a time.
+ * Other processes can not read from the ringbuffer while it is locked.
+ * A process that successfully locks the ringbuffer must arrange for a call
+ * to rb_release_write() when the lock is not needed any longer.
+ *
+ * @param rb pointer to the ringbuffer structure.
+ *
+ * @return 1 if locked; 0 otherwise.
+ */
 //=============================================================================
 static inline int rb_try_exclusive_write(rb_t *rb)
 {
@@ -1676,12 +1756,12 @@ static inline int rb_try_exclusive_write(rb_t *rb)
 }
 
 /**
-* Release a previously acquired write lock with rb_try_exclusive_write().
-*
-* Only processes that successfully locked the ringbuffer previously are allowed to call this function.
-*
-* @param rb a pointer to the ringbuffer structure.
-*/
+ * Release a previously acquired write lock with rb_try_exclusive_write().
+ *
+ * Only processes that successfully locked the ringbuffer previously are allowed to call this function.
+ *
+ * @param rb pointer to the ringbuffer structure.
+ */
 //=============================================================================
 static inline void rb_release_write(rb_t *rb)
 {
@@ -1691,8 +1771,17 @@ static inline void rb_release_write(rb_t *rb)
 }
 
 /**
-* Print out information about ringbuffer to stderr.
-*/
+ * Print out brief information about ringbuffer to stderr.
+ *
+ * Example outputs:
+ * @code
+ * can read: 0 @ 0  can write: 1 @ 0 last was: read. mlock: no. shm: no. malloc()
+ * 
+ * can read: 0 @ 0  can write: 1 @ 0 last was: read. mlock: yes. shm: yes. 0a665956-fe9a-11e5-9718-74d435e313ae
+ * @endcode
+ *
+ * Also see 'rb_show_fill.c' included in the sourcecode repository of rb.h. 
+ */
 //=============================================================================
 static inline void rb_debug(const rb_t *rb)
 {
@@ -1714,9 +1803,21 @@ static inline void rb_debug(const rb_t *rb)
 }
 
 /**
-* Print out information about rinbuffer including a bar graph to indicate
-* the buffer fill level.
-*/
+ * Print out information to stderr about ringbuffer including a bar graph to indicate
+ * the buffer's fill level.
+ *
+ * Example output:
+ *
+ * @code
+ * 3882a050-fe7d-11e5-b075-74d435e313ae (v0.210): buffer 1
+ * audio:   2 channels @  48000 Hz,  4 bytes per sample, capacity     1.900 s
+ * multichannel frames can read:    39680 can write:    51520
+ * r/w 0.832 w 1886208 r 1568768 d 317440 p 1568768 o 0 u 0 
+ * fill 0.435088 [===================>                          ]     0.827 s
+ * @endcode
+ *
+ * Also see 'rb_show_fill.c' included in the sourcecode repository of rb.h. 
+ */
 //=============================================================================
 static inline void rb_debug_linearbar(const rb_t *rb)
 {
@@ -1797,8 +1898,13 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 }
 
 /**
-* Print out information about rinbuffer regions to stderr.
-*/
+ * ..............
+ * Example outputs:
+ * @code
+ * @endcode
+ *
+ * Also see 'rb_show_fill.c' included in the sourcecode repository of rb.h. 
+ */
 //=============================================================================
 static inline void rb_print_regions(const rb_t *rb)
 {
@@ -1821,31 +1927,41 @@ static inline void rb_print_regions(const rb_t *rb)
 //=============================================================================
 //"ALIASES"
 
-/**
-* \brief This is an alias to rb_advance_read_index().
-*/
+/**\brief This is an alias to rb_advance_read_index().*/
 static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_index(rb,count);}
 
-/**
-* \brief This is an alias to rb_drop().
-*/
+/**\brief This is an alias to rb_drop().*/
 static inline size_t rb_skip_all(rb_t *rb) {return rb_drop(rb);}
 
-/**
-* \brief This is an alias to rb_overadvance_read_index().
-*/
+/**\brief This is an alias to rb_overadvance_read_index().*/
 static inline size_t rb_overskip(rb_t *rb, size_t count) {return rb_overadvance_read_index(rb,count);}
+
+//doxygen sets this to include normally unset preprocessor defines in the documentation
+#ifdef DOXYGEN
+	#define RB_ALIASES_1
+	/**< If defined (without value), add method aliases set 1.*/
+	#define RB_ALIASES_2
+	/**< If defined (without value), add method aliases set 2.*/
+#endif
 
 //#define RB_ALIASES_1
 #ifdef RB_ALIASES_1
 //if rb.h is used as a jack_ringbuffer replacement these wrappers simplify source modification
 //(sed 's/jack_ringbuffer_/rb_/g')
+
+/**\brief This is an alias to rb_new(). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline rb_t *rb_create(size_t size)			{return rb_new(size);}
+/**\brief This is an alias to rb_can_read(). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline size_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
+/**\brief This is an alias to rb_can_write(). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
+/**\brief This is an alias to rb_advance_read_index(). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_index(rb,count);}
+/**\brief This is an alias to rb_advance_write_index(). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_index(rb,count);}
+/**\brief This is an alias to rb_rb_get_read_regions). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline void rb_get_read_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_read_regions(rb,regions);}
+/**\brief This is an alias to rb_rb_get_write_regions(). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline void rb_get_write_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_write_regions(rb,regions);}
 #endif
 
@@ -1853,8 +1969,12 @@ static inline void rb_get_write_vector(const rb_t *rb, rb_region_t *regions) {re
 #ifdef RB_ALIASES_2
 //inspired by https://github.com/xant/libhl/blob/master/src/rbuf.c,
 //http://svn.drobilla.net/lad/trunk/raul/raul/RingBuffer.hpp
-static inline size_t rb_capacity(rb_t *rb)	{return rb->size;}
+
+/**\brief This is an alias to rb_size(). Part of aliases set 2 (RB_ALIASES_2).*/
+static inline size_t rb_capacity(rb_t *rb)	{return rb_size(rb);}
+/**\brief This is an alias to rb_reset(). Part of aliases set 2 (RB_ALIASES_2).*/
 static inline void rb_clear(rb_t *rb)		{rb_reset(rb);}
+/**\brief This is an alias to rb_free(). Part of aliases set 2 (RB_ALIASES_2).*/
 static inline void rb_destroy(rb_t *rb)		{rb_free(rb);}
 #endif
 
@@ -1863,4 +1983,32 @@ static inline void rb_destroy(rb_t *rb)		{rb_free(rb);}
 #endif
 
 #endif //header guard
+
+/**
+\page call_graphs Call graphs
+\section cb_ret_rb_t Call graph of functions returning a pointer to an rb_t structure:
+\dot
+
+digraph callgraph {
+"rb_new_named" -> "rb_new_audio" [style=solid];
+"rb_new_shared_named" -> "rb_new_shared_audio" [style=solid];
+"rb_new_shared_audio" -> "rb_set_common_init_values" [style=solid];
+"rb_new_shared_audio_seconds" -> "rb_second_to_byte_count" [style=solid];
+"rb_new_shared_audio_seconds" -> "rb_new_shared_audio" [style=solid];
+"rb_new_shared" -> "rb_new_shared_audio" [style=solid];
+"rb_new_audio" -> "rb_set_common_init_values" [style=solid];
+"rb_new_audio_seconds" -> "rb_new_audio" [style=solid];
+"rb_new_audio_seconds" -> "rb_second_to_byte_count" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_open_shared" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_shared" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_audio_seconds" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_named" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_shared_named" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_free" [style=solid];
+"callgraph_of_functions_returning_rb_t" -> "rb_new_shared_audio_seconds" [style=solid];
+"rb_new" -> "rb_new_audio" [style=solid];
+}
+\enddot
+*/
 //EOF
