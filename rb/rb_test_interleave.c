@@ -109,7 +109,7 @@ int main()
 	rb_free(rb);
 
 	//audio, 3 channels
-	rb=rb_new_audio(ITEM_COUNT*sizeof(float),"audio",1000,3,sizeof(float));
+	rb=rb_new_audio(ITEM_COUNT*sizeof(float),"audiobuf",1000,3,sizeof(float));
 
 	if(rb==NULL) {return 1;}
 	wrote=rb_write(rb,(unsigned char *)floats,ITEM_COUNT*sizeof(float));
