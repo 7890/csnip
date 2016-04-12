@@ -1,8 +1,9 @@
 /** @file rb.h \mainpage Introduction
  * rb.h -- A set of functions to work with lock-free ringbuffers.
+ * A ringbuffer can hold n (count) bytes of data.
  *
- * \image html drawing_ringbuffer_1_path.svg "Ringbuffer"
- * \image latex drawing_ringbuffer_1_path.eps "Ringbuffer"
+ * \image html drawing_ringbuffer_1_path.svg "Ringbuffer (size=12)"
+ * \image latex drawing_ringbuffer_1_path.eps "Ringbuffer (size=12)"
  *
  * The key attribute of this ringbuffer is that it can be safely accessed
  * by two threads simultaneously -- one reading from the buffer and
@@ -12,8 +13,19 @@
  * identities cannot be interchanged, i.e. a reader can not become a
  * writer and vice versa.
  *
+ * A ringbuffer can be created in shared memory allowing two processes to 
+ * read and write to it. This enables a simple form of IPC.
+ *
+ * rb.h offers several audio-centric functions that facilitate to use the 
+ * buffer with audiosample data or similar data sharing aspects of audio.
+ * Audiosample data is characterized through the sample rate, the number of
+ * (interleaved) channels and the size (count of bytes) of one sample.
+ *
+ * For situations where multiple reader or writer threads or processes are
+ * involved rb.h offers locking mechanisms (mutex) to allow exclusive reads/writes.
+ *
  * Please find a documentation of all functions here: \ref rb.h.
- * 
+ *
  * rb.h is part of a collection of C snippets which can be found here:
  * [https://github.com/7890/csnip](https://github.com/7890/csnip)
  *
@@ -74,14 +86,17 @@ interoperability with other programs using (including at compile time) a previou
 
 #define RB_DISABLE_RW_MUTEX
 /**< If defined (without value), do NOT provide read and write mutex locks.
-Programs that include rb.h without setting #RB_DISABLE_RW_MUTEX defined need to link with '-lphtread'.
+Programs that include rb.h without setting #RB_DISABLE_RW_MUTEX defined need to link with '-lpthread'.
 Not disabling doesn't mean that read and write operations are locked by default.
 A caller can use these functions to wrap read and write operations:
-See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write().*/
+See also rb_try_exclusive_read(), rb_release_read(), rb_try_exclusive_write(), rb_release_write().
+Using any locking functions makes rb.h a non-lockfree buffer, allowing more than one read or write
+thread or process.
+*/
 
 #define RB_DISABLE_SHM
 /**< If defined (without value), do NOT provide shared memory support.
-Files created in shared memory can normally be found under '/dev/shm/'.
+Files created in shared memory can normally be found under '/dev/shm/' on a Linux system.
 Programs that include rb.h without setting #RB_DISABLE_SHM need to link with '-lrt -luuid'.
 See also rb_new_shared().*/
 
@@ -136,15 +151,15 @@ static const char *bar_string="=================================================
  */
 typedef struct
 {
-  char magic[8];
-  float version;
+  char magic[8];		/**< \brief The first 8 bytes of a ringbuffer data structure. Like in a file header, this "MAGIC" signature helps to quickly identify if these bytes could be the start of a rb.h ringbuffer data structure.*/
+  float version;		/**< \brief Version of rb.h. This can be used to verify that the binary format of other rb.h in use match this one.*/
   size_t size;			/**< \brief Size in bytes of the buffer as requested by caller.*/
-  volatile size_t read_index;	/**< \brief Absolute position (index) in the buffer for read operations.*/
-  volatile size_t write_index;	/**< \brief Abolute position (index) in the buffer for write operations.*/
+  volatile size_t read_index;	/**< \brief Absolute position (index, "pointer") in the buffer for read operations.*/
+  volatile size_t write_index;	/**< \brief Abolute position (index, "pointer") in the buffer for write operations.*/
   volatile int last_was_write;	/**< \brief Whether or not the last operation on the buffer was of type write (write index advanced).
-				      !last_was_write corresponds to read operation accordingly (read pinter advanced).*/
+				      !last_was_write corresponds to a read operation accordingly (read pinter advanced).*/
   int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps).*/
-  int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm').*/
+  int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm') on a Linux system.*/
 
   int unlink_requested;		/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free()).*/ 
 
@@ -157,11 +172,11 @@ typedef struct
   char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle.*/
   char human_name[256];		/**< \brief Name of buffer, alphanumeric.*/
 
-  uint64_t total_bytes_read;	/**< \brief Total bytes read from this ringbuffer. Aadvancing the read index is iterpreted as read. Internal calls are also counted. rb_reset() will reset this value.*/
-  uint64_t total_bytes_write;	/**< \brief Total bytes written to this ringbuffer. Advancing the write index is interpreted as write. Internal calls are also counted. rb_reset() will reset this value.*/
+  uint64_t total_bytes_read;	/**< \brief Total bytes read from this ringbuffer. Aadvancing the read index is iterpreted as a read operation. Internal calls are also counted. rb_reset() and rb_reset_stats() will reset this value.*/
+  uint64_t total_bytes_write;	/**< \brief Total bytes written to this ringbuffer. Advancing the write index is interpreted as a write operation. Internal calls are also counted. rb_reset() and rb_reset_stats() will reset this value.*/
   uint64_t total_bytes_peek;	/**< \brief Total bytes peeked from this ringbuffer. rb_reset() will reset this value.*/
-  uint64_t total_underflows;	/**< \brief Total underflow incidents (not bytes): could not read the requested amount of bytes. rb_reset() will reset this value.*/
-  uint64_t total_overflows;	/**< \brief Total overflow incidents (not bytes): could not write the requested amount of bytes. rb_reset() will reset this value.*/
+  uint64_t total_underflows;	/**< \brief Total underflow incidents (not bytes): could not read the requested amount of bytes. rb_reset() and rb_reset_stats() will reset this value.*/
+  uint64_t total_overflows;	/**< \brief Total overflow incidents (not bytes): could not write the requested amount of bytes. rb_reset() and rb_reset_stats() will reset this value.*/
 
 #ifndef RB_DISABLE_RW_MUTEX
   pthread_mutexattr_t mutex_attributes;
@@ -280,6 +295,7 @@ static inline void rb_print_regions(const rb_t *rb);
 
 /**
  * Used internally while creating new instances of rb_t.
+ * This function sets all rb_t members to an initial value.
  */
 //=============================================================================
 static inline void rb_set_common_init_values(rb_t *rb)
@@ -322,7 +338,7 @@ static inline void rb_set_common_init_values(rb_t *rb)
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * #RB_DEFAULT_USE_SHM is set at compile time in which case ..new_shared..()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case new_shared*()
  * methods will be called implicitely.
  *
  * @param size ringbuffer size in bytes, >0
@@ -344,7 +360,7 @@ static inline rb_t *rb_new(size_t size)
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * #RB_DEFAULT_USE_SHM is set at compile time in which case ..new_shared..()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case new_shared*()
  * methods will be called implicitely.
  *
  * @param size ringbuffer size in bytes, >0
@@ -366,7 +382,7 @@ static inline rb_t *rb_new_named(size_t size, const char *name)
  * the memory associated with the ringbuffer after use.
  *
  * The ringbuffer is allocated in heap memory with malloc() unless 
- * #RB_DEFAULT_USE_SHM is set at compile time in which case ..new_shared..()
+ * #RB_DEFAULT_USE_SHM is set at compile time in which case new_shared*()
  * methods will be called implicitely.
  *
  * @param seconds duration [s] of audiosample data (with given properties) the ringbuffer can hold
@@ -466,7 +482,7 @@ static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name
  *
  * The ringbuffer is allocated as a file in shared memory with a name similar to
  * 'b6310884-9938-11e5-bf8c-74d435e313ae'. Shared memory is normally visible in the
- * filesystem under /dev/shm/. The generated name ought to be unique (UUID) and 
+ * filesystem under /dev/shm/ on a Linux sytem. The generated name ought to be unique (UUID) and 
  * can be accessed via rb_shared_memory_handle(). 
  *
  * Ringbuffers allocated in shared memory can be accessed by other processes.
@@ -556,7 +572,7 @@ static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sampl
  * Open an existing ringbuffer data structure in shared memory.
  *
  * The ringbuffer to open must be available as a file in shared memory.
- * Shared memory is normally visible in the filesystem under /dev/shm/.
+ * Shared memory is normally visible in the filesystem under /dev/shm/ on a Linux system.
  *
  * Not calling rb_free() after use means to leave a file in /dev/shm/. This can be
  * intentional or not.
@@ -730,7 +746,7 @@ static inline void rb_reset_stats(rb_t *rb)
 }
 
 /**
- * Reset the read and write indices and statistics, making an empty buffer.
+ * Reset the read and write indices and statistics, making it an empty buffer.
  *
  * Any active reader and/or writer should be done before calling rb_reset().
  *
@@ -1720,7 +1736,7 @@ static inline int rb_try_exclusive_read(rb_t *rb)
 }
 
 /**
- * Release a previously acquired write lock with rb_try_exclusive_write().
+ * Release a previously acquired write lock (see rb_try_exclusive_write()).
  *
  * Only processes that successfully locked the ringbuffer previously are allowed to call this function.
  *
@@ -1757,7 +1773,7 @@ static inline int rb_try_exclusive_write(rb_t *rb)
 }
 
 /**
- * Release a previously acquired write lock with rb_try_exclusive_write().
+ * Release a previously acquired write lock (see rb_try_exclusive_write()).
  *
  * Only processes that successfully locked the ringbuffer previously are allowed to call this function.
  *
@@ -2015,7 +2031,7 @@ digraph callgraph {
 }
 \enddot
 *
-* The diagram above shows that any creation of a new rb_t will call either rb_new_audio() or rb_new_shared_audio().
+* The graph above shows that any creation of a new rb_t will call either rb_new_audio() or rb_new_shared_audio().
 * The term 'audio' in the function doesn't mean it's only for audio.
 * However it can imply that some members of rb_t are left untouched if the ringbuffer is not used with audiosample data.
 * The overhead is possibly neglectable and depends mainly on the size of the ringbuffer.
