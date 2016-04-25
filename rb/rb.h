@@ -75,7 +75,7 @@ extern "C" {
 static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
 /**< The first few bytes in a rb_t data block.*/
 
-static const float RB_VERSION=0.21;
+static const float RB_VERSION=0.22;
 /**< Version of rb.h. Changing the rb.h binary data layout can cause the loss of 
 interoperability with other programs using (including at compile time) a previous version of rb.h.*/
 
@@ -149,6 +149,10 @@ static const char *bar_string="=================================================
  * if(ringbuffer!=NULL) { //do stuff }
  * @endcode
  */
+//pragma pack(1) tells the compiler to not fiddle with the binary layout of the struct
+//i.e. insert padding, realign or reorder the members.
+//http://stackoverflow.com/questions/3318410/pragma-pack-effect
+#pragma pack(1)
 typedef struct
 {
   char magic[8];		/**< \brief The first 8 bytes of a ringbuffer data structure. Like in a file header, this "MAGIC" signature helps to quickly identify if these bytes could be the start of a rb.h ringbuffer data structure.*/
@@ -169,14 +173,14 @@ typedef struct
   int channel_count;		/**< \brief Count of channels stored in this buffer (interleaved).*/
   int bytes_per_sample;		/**< \brief Count of bytes per audio sample.*/
 
-  char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle.*/
-  char human_name[256];		/**< \brief Name of buffer, alphanumeric.*/
-
   uint64_t total_bytes_read;	/**< \brief Total bytes read from this ringbuffer. Aadvancing the read index is iterpreted as a read operation. Internal calls are also counted. rb_reset() and rb_reset_stats() will reset this value.*/
   uint64_t total_bytes_write;	/**< \brief Total bytes written to this ringbuffer. Advancing the write index is interpreted as a write operation. Internal calls are also counted. rb_reset() and rb_reset_stats() will reset this value.*/
   uint64_t total_bytes_peek;	/**< \brief Total bytes peeked from this ringbuffer. rb_reset() will reset this value.*/
   uint64_t total_underflows;	/**< \brief Total underflow incidents (not bytes): could not read the requested amount of bytes. rb_reset() and rb_reset_stats() will reset this value.*/
   uint64_t total_overflows;	/**< \brief Total overflow incidents (not bytes): could not write the requested amount of bytes. rb_reset() and rb_reset_stats() will reset this value.*/
+
+  char shm_handle[256];		/**< \brief Name of shared memory file, alphanumeric handle.*/
+  char human_name[256];		/**< \brief Name of buffer, alphanumeric.*/
 
 #ifndef RB_DISABLE_RW_MUTEX
   pthread_mutexattr_t mutex_attributes;
