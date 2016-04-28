@@ -129,8 +129,12 @@ See also rb_new_shared_*() methods.*/
 	#include <uuid/uuid.h> //uuid_generate_time_safe
 #endif
 
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#define MIN(a,b) (((a)<(b))?(a):(b))
+#ifndef MIN
+	#define MIN(a,b) (((a)<(b))?(a):(b))
+#endif
+#ifndef MAX
+	#define MAX(a,b) (((a)>(b))?(a):(b))
+#endif
 
 static const char *bar_string="============================================================";
 /**< Used in method rb_debug_linearbar() to indicate buffer fill level.*/
