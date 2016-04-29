@@ -4,7 +4,7 @@
 //=============================================================================
 public class RBTest
 {
-	int bufsize=128000;
+	int bufsize=1280000;
 	byte[] tmpbuf=new byte[bufsize];
 
 
@@ -74,14 +74,14 @@ public class RBTest
 		while(true)
 		{
 			print_rb(rb);
-			if(rb.can_read()>=bufsize)
+			if(rb.can_read()>0)//=bufsize)
 			{
 				//test read from buffer (which has size >=bufsize, available data >=bufsize)
 				long count=rb.generic_read(tmpbuf,bufsize,0);
 //				e("read count: "+count);
 			}
 //			e("can read after read: "+rb.can_read());
-			try{Thread.sleep(20);}catch(Exception e){}
+			try{Thread.sleep(4);}catch(Exception e){}
 		}//end while true
 //		rb.free();
 	}//end RB constructor
