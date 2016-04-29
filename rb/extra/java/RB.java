@@ -52,7 +52,10 @@ public class RB
 	public static final int BOFF_human_name		=BOFF_shm_handle	+256;//@ 364: char [256] (end 620)
 
 	//buffer data starts after the header
-	private int header_length=BOFF_human_name+256;
+	///private int header_length=BOFF_human_name+256          +84; ///wrong, excludes mutex
+	//RB_DISABLE_RW_MUTEX not set
+	//sizeof(rb_t): 704
+	private int header_length=704;
 
 	//direct memory mapped bytebuffer, accessing c struct via RandomAccess file
 	private MappedByteBuffer mbb;
@@ -177,7 +180,7 @@ public class RB
 	}
 
 //=============================================================================
-	public long generic_read(byte[] buffer, long count, int over)
+	public long generic_read(byte[] destination, long count, int over)
 	{
 		if(count==0) {return 0;}
 
@@ -216,7 +219,7 @@ public class RB
 		//position at current read_index
 		mbb.position((int)(header_length+read_index()));
 		//get(byte[] dst, int offset, int length)
-		mbb.get(buffer, 0, (int)copy_count_1);
+		mbb.get(destination, 0, (int)copy_count_1);
 
 		if(copy_count_2<1)
 		{
@@ -227,7 +230,7 @@ public class RB
 			//memcpy(destination+copy_count_1, &( ((char*)buf_ptr(rb)) [0]), copy_count_2);
 			//position to buffer data 0 (right after header)
 			mbb.position(header_length);
-			mbb.get(buffer, (int)copy_count_1, (int)copy_count_2);
+			mbb.get(destination, (int)copy_count_1, (int)copy_count_2);
 			read_index( copy_count_2 % size() );
 		}
 
@@ -245,6 +248,75 @@ public class RB
 
 		return do_read_count;
 	}//end generic_read
+
+
+//=============================================================================
+	public long peek(byte[] destination, long count)
+	{
+		return peek_at(destination,count,0);
+	}
+
+//=============================================================================
+	public long peek_at(byte[] destination, long count, long offset)
+	{
+		if(count==0) {return 0;}
+
+		long can_read_count=can_read();
+
+		//can not read more than offset, no chance to read from there
+		if(can_read_count<=offset)
+		{
+			total_underflows(total_underflows()+1);
+			return 0;
+		}
+		//limit read count respecting offset
+		long do_read_count=count>can_read_count-offset ? can_read_count-offset : count;
+		//adding the offset, knowing it could be beyond buffer end
+		long tmp_read_index=read_index()+offset;
+		//including all: current read index + offset + limited read count
+		long linear_end=tmp_read_index+do_read_count;
+		long copy_count_1;
+		long copy_count_2;
+
+		//beyond
+		if(linear_end>size())
+		{
+			//still beyond
+			if(tmp_read_index>=size())
+			{
+				//all in rolled over
+				tmp_read_index%=size();
+				copy_count_1=do_read_count;
+				copy_count_2=0;
+			}
+			//segmented
+			else
+			{
+				copy_count_1=size()-tmp_read_index;
+				copy_count_2=linear_end-size()-offset;
+			}
+		}
+		else
+		//if not beyond the buffer end
+		{
+			copy_count_1=do_read_count;
+			copy_count_2=0;
+		}
+		mbb.position((int)(header_length+tmp_read_index));
+		mbb.get(destination, 0, (int)copy_count_1);
+
+		if(copy_count_2>0)
+		{
+			mbb.position(header_length);
+			mbb.get(destination, (int)copy_count_1, (int)copy_count_2);
+		}
+
+		total_bytes_peek(total_bytes_peek()+do_read_count);
+
+		if(do_read_count<count){total_underflows(total_underflows()+1);}
+
+		return do_read_count;
+	}//end peek_at
 
 //=============================================================================
 	public long open_shared(String shm_handle) throws Exception
