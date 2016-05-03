@@ -322,8 +322,11 @@ public class RB
 	public long open_shared(String shm_handle) throws Exception
 	{
 		///more error checking needed
-
 		File f=new File(shm_handle);
+		if(!f.exists() || !f.canWrite())
+		{
+			throw new Exception("ringbuffer "+shm_handle+" not found or not writable.");
+		}
 		/*
 		"rws" Open for reading and writing, as with "rw", and also require that every 
 		update to the file's content or metadata be written synchronously to the 
