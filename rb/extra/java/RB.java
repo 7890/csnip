@@ -149,6 +149,31 @@ public class RB
 	public RB(){}
 
 //=============================================================================
+	public long open_shared(String shm_handle) throws Exception
+	{
+		///more error checking needed
+		File f=new File(shm_handle);
+		if(!f.exists() || !f.canWrite())
+		{
+			throw new Exception("ringbuffer "+shm_handle+" not found or not writable.");
+		}
+		/*
+		"rws" Open for reading and writing, as with "rw", and also require that every 
+		update to the file's content or metadata be written synchronously to the 
+		underlying storage device. 
+		*/
+		RandomAccessFile in = new RandomAccessFile(f, "rws");
+		FileChannel fc = in.getChannel();
+
+		p("filechannel size bytes: "+fc.size()+" file size bytes "+f.length());
+
+		//map whole file
+		mbb=fc.map(FileChannel.MapMode.READ_WRITE,0,f.length());
+		mbb.order(ByteOrder.LITTLE_ENDIAN);
+		return fc.size();
+	}
+
+//=============================================================================
 	public long can_read()
 	{
 		long r=read_index();
@@ -209,13 +234,14 @@ public class RB
 			do_read_count=count > can_read_count ? can_read_count : count;
 		}
 
-		long linear_end=read_index()+do_read_count;
+		long r=read_index();
+		long linear_end=r+do_read_count;
 		long copy_count_1;
 		long copy_count_2;
 
 		if(linear_end>size())
 		{
-			copy_count_1=size()-read_index();
+			copy_count_1=size()-r;
 			copy_count_2=linear_end-size();
 		}
 		else
@@ -226,13 +252,13 @@ public class RB
 
 		//memcpy(destination, &( ((char*)buf_ptr(rb)) [rb->read_index] ), copy_count_1);
 		//position at current read_index
-		mbb.position((int)(header_length+read_index()));
+		mbb.position((int)(header_length+r));
 		//get(byte[] dst, int offset, int length)
 		mbb.get(destination, 0, (int)copy_count_1);
 
 		if(copy_count_2<1)
 		{
-			read_index( (read_index()+copy_count_1) % size() );
+			read_index( (r+copy_count_1) % size() );
 		}
 		else
 		{
@@ -257,7 +283,6 @@ public class RB
 
 		return do_read_count;
 	}//end generic_read
-
 
 //=============================================================================
 	public long peek(byte[] destination, long count)
@@ -328,29 +353,49 @@ public class RB
 	}//end peek_at
 
 //=============================================================================
-	public long open_shared(String shm_handle) throws Exception
+	public long generic_advance_read_index(long count, int over)
 	{
-		///more error checking needed
-		File f=new File(shm_handle);
-		if(!f.exists() || !f.canWrite())
+		if(count==0) {return 0;}
+		long can_read_count;
+		long do_advance_count;
+
+		if(over==1)
 		{
-			throw new Exception("ringbuffer "+shm_handle+" not found or not writable.");
+			can_read_count=can_read();
+			//limit to whole buffer
+			do_advance_count=Math.min(size(),count);
 		}
-		/*
-		"rws" Open for reading and writing, as with "rw", and also require that every 
-		update to the file's content or metadata be written synchronously to the 
-		underlying storage device. 
-		*/
-		RandomAccessFile in = new RandomAccessFile(f, "rws");
-		FileChannel fc = in.getChannel();
+		else
+		{
+			can_read_count=can_read();
+			if(can_read_count<1)
+			{
+				total_underflows(total_underflows()+1);
+				return 0;
+			}
+			do_advance_count=count > can_read_count ? can_read_count : count;
+		}
 
-		p("filechannel size bytes: "+fc.size()+" file size bytes "+f.length());
+		long r=read_index();
+		long linear_end=r+do_advance_count;
+		long tmp_read_index=linear_end>size() ? linear_end-size() : r+do_advance_count;
 
-		//map whole file
-		mbb=fc.map(FileChannel.MapMode.READ_WRITE,0,f.length());
-		mbb.order(ByteOrder.LITTLE_ENDIAN);
-		return fc.size();
-	}
+		read_index( tmp_read_index%=size() );
+
+		//if write index was overpassed, move up to read index
+		if(over==1 && can_read_count<do_advance_count)
+		{
+			write_index( read_index() );
+		}
+
+		last_was_write(0);
+
+		total_bytes_read(total_bytes_read()+do_advance_count);
+
+		if(do_advance_count<count){total_underflows(total_underflows()+1);}
+
+		return do_advance_count;
+	}//generic_advance_read_index()
 
 //=============================================================================
 	public void free() throws Exception
