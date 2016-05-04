@@ -45,9 +45,12 @@ public class RBTest
 		e("read index: "	+rb.read_index());
 		e("write index: "	+rb.write_index());
 		e("last_was_write: "	+rb.last_was_write());
-		e("memory_locked: "	+rb.memory_locked());
-		e("in_shared_memory: "	+rb.in_shared_memory());
-		e("unlink_requested: "	+rb.unlink_requested());
+		e("memory_locked: "	+rb.is_memory_locked());
+		e("in_shared_memory: "	+rb.is_in_shared_memory());
+		e("memory_lockable: "	+rb.is_memory_lockable());
+		e("memory_shareable: "	+rb.is_memory_shareable());
+		e("mutex_lockable: "	+rb.is_mutex_lockable());
+		e("unlink_requested: "	+rb.is_unlink_requested());
 		e("no_more_input_data: "+rb.no_more_input_data());
 		e("sample_rate: "	+rb.sample_rate());
 		e("channel_count: "	+rb.channel_count());

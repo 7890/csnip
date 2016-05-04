@@ -25,7 +25,7 @@ public class RB
 {
 	public static final byte RB_MAGIC[]={'r','i','n','g','b','u','f','\0'};
 	public static final String RB_MAGIC_STRING=new String(RB_MAGIC);
-	public static final float RB_VERSION=0.22f;
+	public static final float RB_VERSION=0.23f;
 	public static final String bar_string="============================================================";
 
 	//binary layout of C struct ( #pragma pack(1) to keep natural alignment )
@@ -36,26 +36,30 @@ public class RB
 	public static final int BOFF_last_was_write	=BOFF_write_index	+8;  //@  36: int  (4)
 	public static final int BOFF_memory_locked	=BOFF_last_was_write	+4;  //@  40: int  (4)
 	public static final int BOFF_in_shared_memory	=BOFF_memory_locked	+4;  //@  44: int  (4)
-	public static final int BOFF_unlink_requested	=BOFF_in_shared_memory	+4;  //@  48: int  (4)
-	public static final int BOFF_no_more_input_data	=BOFF_unlink_requested	+4;  //@  52: int  (4)
-	public static final int BOFF_sample_rate	=BOFF_no_more_input_data+4;  //@  56: int  (4)
-	public static final int BOFF_channel_count	=BOFF_sample_rate	+4;  //@  60: int  (4)
-	public static final int BOFF_bytes_per_sample	=BOFF_channel_count	+4;  //@  64: int  (4)
 
-	public static final int BOFF_total_bytes_read	=BOFF_bytes_per_sample	+4;  //@  68: long (8)
-	public static final int BOFF_total_bytes_write	=BOFF_total_bytes_read	+8;  //@  76: long (8)
-	public static final int BOFF_total_bytes_peek	=BOFF_total_bytes_write	+8;  //@  84: long (8)
-	public static final int BOFF_total_underflows	=BOFF_total_bytes_peek	+8;  //@  92: long (8)
-	public static final int BOFF_total_overflows	=BOFF_total_underflows	+8;  //@ 100: long (8)
+	public static final int BOFF_memory_lockable	=BOFF_in_shared_memory	+4;  //@  48: int  (4)
+	public static final int BOFF_memory_shareable	=BOFF_memory_lockable	+4;  //@  52: int  (4)
+	public static final int BOFF_mutex_lockable	=BOFF_memory_shareable	+4;  //@  56: int  (4)
 
-	public static final int BOFF_shm_handle		=BOFF_total_overflows	+8;  //@ 108: char [256]
-	public static final int BOFF_human_name		=BOFF_shm_handle	+256;//@ 364: char [256] (end 620)
+	public static final int BOFF_unlink_requested	=BOFF_mutex_lockable	+4;  //@  60: int  (4)
+	public static final int BOFF_no_more_input_data	=BOFF_unlink_requested	+4;  //@  64: int  (4)
+	public static final int BOFF_sample_rate	=BOFF_no_more_input_data+4;  //@  68: int  (4)
+	public static final int BOFF_channel_count	=BOFF_sample_rate	+4;  //@  72: int  (4)
+	public static final int BOFF_bytes_per_sample	=BOFF_channel_count	+4;  //@  76: int  (4)
 
+	public static final int BOFF_total_bytes_read	=BOFF_bytes_per_sample	+4;  //@  80: long (8)
+	public static final int BOFF_total_bytes_write	=BOFF_total_bytes_read	+8;  //@  88: long (8)
+	public static final int BOFF_total_bytes_peek	=BOFF_total_bytes_write	+8;  //@  96: long (8)
+	public static final int BOFF_total_underflows	=BOFF_total_bytes_peek	+8;  //@ 104: long (8)
+	public static final int BOFF_total_overflows	=BOFF_total_underflows	+8;  //@ 112: long (8)
+
+	public static final int BOFF_shm_handle		=BOFF_total_overflows	+8;  //@ 120: char [256]
+	public static final int BOFF_human_name		=BOFF_shm_handle	+256;//@ 376: char [256] (end 632 + 84)
+
+	//84 bytes mutex locks (optional, padded if not available, RB_DISABLE_RW_MUTEX)
 	//buffer data starts after the header
-	///private int header_length=BOFF_human_name+256          +84; ///wrong, excludes mutex
-	//RB_DISABLE_RW_MUTEX not set
-	//sizeof(rb_t): 704
-	private int header_length=704;
+	//sizeof(rb_t): 716
+	private int header_length=716;
 
 	//direct memory mapped bytebuffer, accessing c struct via RandomAccess file
 	private MappedByteBuffer mbb;
@@ -99,9 +103,14 @@ public class RB
 	public int last_was_write(){return mbb.getInt(BOFF_last_was_write);}
 	private void last_was_write(int was_write){mbb.putInt(BOFF_last_was_write,was_write);}
 
-	public int memory_locked(){return mbb.getInt(BOFF_memory_locked);}
-	public int in_shared_memory(){return mbb.getInt(BOFF_in_shared_memory);}
-	public int unlink_requested(){return mbb.getInt(BOFF_unlink_requested);}
+	public int is_memory_locked(){return mbb.getInt(BOFF_memory_locked);}
+	public int is_in_shared_memory(){return mbb.getInt(BOFF_in_shared_memory);}
+
+	public int is_memory_lockable(){return mbb.getInt(BOFF_memory_lockable);}
+	public int is_memory_shareable(){return mbb.getInt(BOFF_memory_shareable);}
+	public int is_mutex_lockable(){return mbb.getInt(BOFF_mutex_lockable);}
+
+	public int is_unlink_requested(){return mbb.getInt(BOFF_unlink_requested);}
 	public int no_more_input_data(){return mbb.getInt(BOFF_no_more_input_data);}
 	public int sample_rate(){return mbb.getInt(BOFF_sample_rate);}
 	public int channel_count(){return mbb.getInt(BOFF_channel_count);}
