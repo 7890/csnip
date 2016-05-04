@@ -75,7 +75,7 @@ extern "C" {
 static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
 /**< The first few bytes in a rb_t data block.*/
 
-static const float RB_VERSION=0.22;
+static const float RB_VERSION=0.23;
 /**< Version of rb.h. Changing the rb.h binary data layout can cause the loss of 
 interoperability with other programs using (including at compile time) a previous version of rb.h.*/
 
@@ -169,6 +169,10 @@ typedef struct
   int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps).*/
   int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm') on a Linux system.*/
 
+  int memory_lockable;		/**< \brief Whether or not the buffer can possibly be locked to memory using mlock(). This flag is 0 if rb.h is compiled with RB_DISABLE_MLOCK, 1 otherwise. */
+  int memory_shareable;		/**< \brief Whether or not the buffer can possibly be created or accessed in shared memory. This flag is 0 if rb.h is compiled with RB_DISABLE_SHM, 1 otherwise. */
+  int mutex_lockable;		/**< \brief Whether or not the buffer can possibly be locked for exclusive read or write access using pthread_mutex. This flag is 0 if rb.h is compiled with RB_DISABLE_RW_MUTEX, 1 otherwise. */
+
   int unlink_requested;		/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free()).*/ 
 
   int no_more_input_data;	/**< \brief A writer can indicate that no more data will be put to the ringbuffer, i.e. the writer finished.*/
@@ -190,6 +194,11 @@ typedef struct
   pthread_mutexattr_t mutex_attributes;
   pthread_mutex_t read_lock;		/**< \brief Mutex lock for mutually exclusive read operations.*/
   pthread_mutex_t write_lock;		/**< \brief Mutex lock for mutually exclusive write operations.*/
+#else
+//pad datatype to get equal header size
+  char pad[sizeof(pthread_mutexattr_t)
+    +sizeof(pthread_mutex_t)
+    +sizeof(pthread_mutex_t)];
 #endif
 }
 rb_t;
@@ -202,6 +211,12 @@ static inline int rb_version(rb_t *rb) {return rb->version;}
 static inline int rb_is_mlocked(rb_t *rb) {return rb->memory_locked;}
 /** Access rb_t member 'in_shared_memory' via method.*/
 static inline int rb_is_shared(rb_t *rb) {return rb->in_shared_memory;}
+/** Access rb_t member 'memory_lockable' via method.*/
+static inline int rb_is_memory_lockable(rb_t *rb) {return rb->memory_lockable;}
+/** Access rb_t member 'memory_shareable' via method.*/
+static inline int rb_is_memory_shareable(rb_t *rb) {return rb->memory_shareable;}
+/** Access rb_t member 'mutex_lockable' via method.*/
+static inline int rb_is_mutex_lockable(rb_t *rb) {return rb->mutex_lockable;}
 /** Access rb_t member 'unlink_requested' via method.*/
 static inline int rb_is_unlink_requested(rb_t *rb) {return rb->unlink_requested;}
 /** Access rb_t member 'unlink_requested' via method.*/
@@ -325,6 +340,26 @@ static inline void rb_set_common_init_values(rb_t *rb)
 
 	rb->shm_handle[0]='\0';
 
+	rb->mutex_lockable=0;
+
+#ifndef RB_DISABLE_RW_MUTEX
+	rb->memory_lockable=1;
+#else
+	rb->memory_lockable=0;
+#endif
+
+#ifndef RB_DISABLE_SHM
+	rb->memory_shareable=1;
+#else
+	rb->memory_shareable=0;
+#endif
+
+#ifndef RB_DISABLE_SHM
+	rb->mutex_lockable=1;
+#else
+	rb->mutex_lockable=0;
+#endif
+
 #ifndef RB_DISABLE_RW_MUTEX
 	#ifndef RB_DISABLE_SHM
 		pthread_mutexattr_init(&rb->mutex_attributes);
@@ -336,7 +371,7 @@ static inline void rb_set_common_init_values(rb_t *rb)
 		pthread_mutex_init(&rb->write_lock, NULL);
 	#endif
 #endif
-}
+}//end rb_set_common_init_values()
 
 /**
  * This is a wrapper to rb_new_audio().
@@ -574,7 +609,7 @@ static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sampl
 
 	return rb;
 #endif
-}
+}//end rb_new_shared_audio()
 
 /**
  * Open an existing ringbuffer data structure in shared memory.
@@ -653,7 +688,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 
 	return rb;
 #endif
-}
+}//end rb_open_shared()
 
 /**
  * Free the ringbuffer data structure allocated by an earlier call to rb_new().
@@ -897,7 +932,7 @@ static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, 
 	if(do_read_count<count){rb->total_underflows++;}
 
 	return do_read_count;
-}
+}//end rb_generic_read()
 
 /**
  * Read data from the ringbuffer and move the read index accordingly.
@@ -1004,7 +1039,7 @@ static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
 	rb->total_bytes_write+=do_write_count;
 	if(do_write_count<count){rb->total_overflows++;}
 	return do_write_count;
-}
+}//end rb_write()
 
 /**
  * Read data from the ringbuffer. Opposed to rb_read()
@@ -1104,7 +1139,7 @@ static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_
 	if(do_read_count<count){rb->total_underflows++;}
 
 	return do_read_count;
-}
+}//end rb_peek_at()
 
 /**
  * Drop / ignore all data available to read.
@@ -1344,7 +1379,7 @@ static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int o
 	if(do_advance_count<count){rb->total_underflows++;}
 
 	return do_advance_count;
-}
+}//rb_generic_advance_read_index()
 
 /**
  * Advance the read index.
@@ -1923,7 +1958,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 			,rb->size-can_w
 		);
 	}
-}
+}//end rb_debug_linearbar()
 
 /**
  * ..............
