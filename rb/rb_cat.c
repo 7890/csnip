@@ -50,8 +50,8 @@ int main(int argc, char *argv[])
 	{
 		while(rb_->no_more_input_data<1)
 		{
-			size_t count=rb_read(rb_,buf,bufsize);
-//			fprintf(stderr,"read %zu bytes from ringbuffer\n",count);
+			int count=rb_read(rb_,buf,bufsize);
+//			fprintf(stderr,"read %d bytes from ringbuffer\n",count);
 			int i=0;
 			for(;i<count;i++)
 			{
@@ -68,17 +68,17 @@ int main(int argc, char *argv[])
 			int count=read(STDIN_FILENO, buf, bufsize);
 //			fprintf(stderr,"read %d bytes from stdin\n",count);
 			if(count<1){break;}
-			size_t canwrite=0;
-			size_t dowrite=0;
-			size_t didwrite=0;
+			int canwrite=0;
+			int dowrite=0;
+			int didwrite=0;
 			while(didwrite<count)
 			{
 				canwrite=rb_can_write(rb_);
-//				fprintf(stderr,"cat write %zu bytes\n",canwrite);
+//				fprintf(stderr,"cat write %dbytes\n",canwrite);
 				dowrite=MIN((count-didwrite),canwrite);
-//				fprintf(stderr,"do write %zu bytes\n",dowrite);
+//				fprintf(stderr,"do write %d bytes\n",dowrite);
 				didwrite+=rb_write(rb_,buf+didwrite,dowrite);
-//				fprintf(stderr,"did write %zu bytes\n",didwrite);
+//				fprintf(stderr,"did write %d bytes\n",didwrite);
 				usleep(500);
 			}
 		}

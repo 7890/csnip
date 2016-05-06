@@ -25,7 +25,7 @@ void debug(rb_t *rb, int from_thread)
 		fprintf(stderr,"\nrb is NULL\n");
 		return;
 	}
-	fprintf(stderr,"can read  %zu @ %zu  can write %zu @ %zu   %s\n"
+	fprintf(stderr,"can read  %" PRId64 " @ %" PRId64 "  can write %" PRId64 " @ %" PRId64 "   %s\n"
 		,rb_can_read(rb)
 		,rb->read_index
 		,rb_can_write(rb)
@@ -45,11 +45,11 @@ static void *reader_thread_func(void *arg)
 	debug(rb_,READER_THREAD);
 	//srand(4321);
 
-	size_t buf_size=32; //22 to match write thread content size
+	int buf_size=32; //22 to match write thread content size
 	char buf[buf_size];
 	memset(buf,0,buf_size);
-	size_t read=0;
-	size_t read_total=0;
+	int read=0;
+	int read_total=0;
 
 	while(1==1)
 	{
@@ -76,7 +76,7 @@ static void *reader_thread_func(void *arg)
 
 		read_total+=read;
 
-		fprintf(stderr,"read %zu read_total %zu '%s'\n"
+		fprintf(stderr,"read %d read_total %d '%s'\n"
 			,read		//bytes read in last rb_read
 			,read_total	//bytes read relative to main read buffer pos 0
 			,buf_read	//contents that were read in last rb_read
@@ -104,12 +104,12 @@ static void *writer_thread_func(void *arg)
 
 	//example data buffer
 	const char *buf="ringbuffers are cool. ";
-	const size_t content_length=22;
+	const int content_length=22;
 
 	//in one rb_write operation (reset each cylce)
-	size_t write=0;
+	int write=0;
 	//relative to full content length (reset after fully written)
-	size_t write_total=0;
+	int write_total=0;
 
 	//repeat to write contents of buf to ringbuffer
 	//handle case when rb_write returns less bytes than requested
@@ -138,7 +138,7 @@ static void *writer_thread_func(void *arg)
 
 		write_total+=write;
 
-		fprintf(stderr,"write %zu write_total %zu '%s'\n"
+		fprintf(stderr,"write %d write_total %d '%s'\n"
 			,write		//bytes written in last rb_write
 			,write_total	//bytes written relative to source buffer pos 0
 			,buf_written	//contents that were written

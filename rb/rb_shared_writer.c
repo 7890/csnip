@@ -21,12 +21,12 @@ static void *writer_thread_func(void *arg)
 
 	//example data buffer
 	const char *buf="ringbuffers are cool. ";
-	const size_t content_length=22;
+	const int content_length=22;
 
 	//in one rb_write operation (reset each cylce)
-	size_t write=0;
+	int write=0;
 	//relative to full content length (reset after fully written)
-	size_t write_total=0;
+	int write_total=0;
 
 	//repeat to write contents of buf to ringbuffer
 	//handle case when rb_write returns less bytes than requested
@@ -55,7 +55,7 @@ static void *writer_thread_func(void *arg)
 
 		write_total+=write;
 
-		fprintf(stderr,"write %zu write_total %zu '%s'\n"
+		fprintf(stderr,"write %d write_total %d '%s'\n"
 			,write		//bytes written in last rb_write
 			,write_total	//bytes written relative to source buffer pos 0
 			,buf_written	//contents that were written
@@ -97,8 +97,8 @@ int main(int argc, char *argv[])
 		goto _have_rb;
 	}
 
-	size_t arg=atoi(argv[1]);
-	//fprintf(stderr,"%zu\n",arg);
+	int arg=atoi(argv[1]);
+	//fprintf(stderr,"%d\n",arg);
 	if(arg>0)
 	{
 		int rb_size_request=arg;
@@ -112,6 +112,8 @@ int main(int argc, char *argv[])
 			fprintf(stderr,"ringbuffer with size 0?\n");
 			exit(1);
 		}
+		fprintf(stderr,"mlock: %d\n",rb_mlock(rb_));
+		fprintf(stdout,"header size: %zu\n",sizeof(rb_t));
 
 		fprintf(stdout,"call rb_shared_reader with this handle:\n%s\n",rb_->shm_handle);
 		fflush(stdout);

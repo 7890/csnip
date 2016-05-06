@@ -54,15 +54,15 @@ int main()
 	rb_t *rb=rb_new(100);//ITEM_COUNT*sizeof(float));
 	if(rb==NULL) {return 1;}
 
-	size_t wrote=rb_write(rb,bytes,ITEM_COUNT);
-	fprintf(stderr,"wrote %zu bytes\n",wrote);
+	int wrote=rb_write(rb,bytes,ITEM_COUNT);
+	fprintf(stderr,"wrote %d bytes\n",wrote);
 	rb_debug(rb);
 
 	unsigned char bytes_deinterleaved[4];
 
-	size_t count=3; size_t size=1; size_t off=0; size_t block=2;
-	size_t deinterleaved=rb_deinterleave_items(rb, bytes_deinterleaved, count,size,off,block);
-	fprintf(stderr,"deinterleave %zu items, item size %zu bytes, item_offset %zu, block_size %zu return %zu bytes\n"
+	int count=3; int size=1; int off=0; int block=2;
+	int deinterleaved=rb_deinterleave_items(rb, bytes_deinterleaved, count,size,off,block);
+	fprintf(stderr,"deinterleave %d items, item size %d bytes, item_offset %d, block_size %d return %d bytes\n"
 		,count,size,off,block,deinterleaved
 	);
 	print_deinterleaved_bytes(bytes_deinterleaved, count);
@@ -71,7 +71,7 @@ int main()
 
 	count=4; size=1; off=1; block=2;
 	deinterleaved=rb_deinterleave_items(rb, bytes_deinterleaved, count,size,off,block);
-	fprintf(stderr,"deinterleave %zu items, item size %zu bytes, item_offset %zu, block_size %zu return %zu bytes\n"
+	fprintf(stderr,"deinterleave %d items, item size %d bytes, item_offset %d, block_size %d return %d bytes\n"
 		,count,size,off,block,deinterleaved
 	);
 	print_deinterleaved_bytes(bytes_deinterleaved, deinterleaved);
@@ -82,13 +82,13 @@ int main()
 	rb_drop(rb);
 
 	wrote=rb_write(rb,(unsigned char *)floats,ITEM_COUNT*sizeof(float));
-	fprintf(stderr,"wrote %zu bytes (%zu floats)\n",wrote,wrote/sizeof(float));
+	fprintf(stderr,"wrote %d bytes (%zu floats)\n",wrote,wrote/sizeof(float));
 
 	float floats_deinterleaved[3];//={9,9,9};
 
 	count=3; size=sizeof(float); off=0; block=2;
 	deinterleaved=rb_deinterleave_items(rb, (unsigned char *)floats_deinterleaved, count,size,off,block);
-	fprintf(stderr,"deinterleave %zu items, item size %zu bytes, item_offset %zu, block_size %zu return %zu bytes\n"
+	fprintf(stderr,"deinterleave %d items, item size %d bytes, item_offset %d, block_size %d return %d bytes\n"
 		,count,size,off,block,deinterleaved
 	);
 
@@ -98,7 +98,7 @@ int main()
 
 	count=4; size=sizeof(float); off=1; block=2;
 	deinterleaved=rb_deinterleave_items(rb, (unsigned char *)floats_deinterleaved, count,size,off,block);
-	fprintf(stderr,"deinterleave %zu items, item size %zu bytes, item_offset %zu, block_size %zu return %zu bytes\n"
+	fprintf(stderr,"deinterleave %d items, item size %d bytes, item_offset %d, block_size %d return %d bytes\n"
 		,count,size,off,block,deinterleaved
 	);
 
@@ -113,13 +113,13 @@ int main()
 
 	if(rb==NULL) {return 1;}
 	wrote=rb_write(rb,(unsigned char *)floats,ITEM_COUNT*sizeof(float));
-	fprintf(stderr,"wrote %zu bytes (%zu floats)\n",wrote,wrote/sizeof(float));
+	fprintf(stderr,"wrote %d bytes (%zu floats)\n",wrote,wrote/sizeof(float));
 	rb_debug_linearbar(rb);
 
 	count=3; off=0;
 
 	deinterleaved=rb_deinterleave_audio(rb, (unsigned char *)floats_deinterleaved, count,off);
-	fprintf(stderr,"deinterleave %zu frames, item_offset %zu, return %zu bytes\n"
+	fprintf(stderr,"deinterleave %d frames, item_offset %d, return %d bytes\n"
 		,count,off,deinterleaved
 	);
 
@@ -130,7 +130,7 @@ int main()
 	count=3; off=1;
 
 	deinterleaved=rb_deinterleave_audio(rb, (unsigned char *)floats_deinterleaved, count,off);
-	fprintf(stderr,"deinterleave %zu frames, item_offset %zu, return %zu bytes\n"
+	fprintf(stderr,"deinterleave %d frames, item_offset %d, return %d bytes\n"
 		,count,off,deinterleaved
 	);
 

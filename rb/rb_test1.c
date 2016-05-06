@@ -83,7 +83,7 @@ int main(int argc, char *argv[])
 
 	rb_print_regions(rb);
 
-	size_t advanced;
+	int advanced;
 	int k;
 	for(k=0;k<20;k++)
 	{
@@ -113,7 +113,7 @@ int main(int argc, char *argv[])
 	rb_region_t d;
 	rb_get_next_write_region(rb,&d);
 
-	fprintf(stderr,"\n==got next write buffer, can write %zu\n",d.size);
+	fprintf(stderr,"\n==got next write buffer, can write %" PRId64 "\n",d.size);
 
 	fprintf(stderr,"\n==drop\n");
 	rb_drop(rb);
@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
 
 	rb_get_next_write_region(rb,&d);
 
-	fprintf(stderr,"\n==got next write buffer, can write %zu\n",d.size);
+	fprintf(stderr,"\n==got next write buffer, can write %" PRId64 "\n",d.size);
 	d.buffer[0]='x';
 
 	fprintf(stderr,"\n==advance write 4\n");
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
 
 	rb_get_next_read_region(rb,&d);
 
-	fprintf(stderr,"\n==got next read buffer, can read %zu\n",d.size);
+	fprintf(stderr,"\n==got next read buffer, can read %" PRId64 "\n",d.size);
 
 	fprintf(stderr,"\n==advance read 4\n");
 	rb_advance_read_index(rb,4);
@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
 
 	rb_get_next_read_region(rb,&d);
 
-	fprintf(stderr,"\n==got next read buffer, can read %zu\n",d.size);
+	fprintf(stderr,"\n==got next read buffer, can read %" PRId64 "\n",d.size);
 	d.buffer[0]='x';
 
 	fprintf(stderr,"\n==advance read 1\n");

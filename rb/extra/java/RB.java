@@ -25,7 +25,7 @@ public class RB
 {
 	public static final byte RB_MAGIC[]={'r','i','n','g','b','u','f','\0'};
 	public static final String RB_MAGIC_STRING=new String(RB_MAGIC);
-	public static final float RB_VERSION=0.23f;
+	public static final float RB_VERSION=0.24f;
 	public static final String bar_string="============================================================";
 
 	//binary layout of C struct ( #pragma pack(1) to keep natural alignment )

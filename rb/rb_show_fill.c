@@ -12,7 +12,7 @@ void debug(rb_t *rb)
 	}
 	int max_width=10;
 
-	fprintf(stderr,"\rr: %*zu @ %*zu  w: %*zu @ %*zu last: %s mlock: %s"
+	fprintf(stderr,"\rr: %*" PRId64 " @ %*" PRId64 " w: %*" PRId64 " @ %*" PRId64 " last: %s mlock: %s"
 		,max_width
 		,rb_can_read(rb)
 		,max_width

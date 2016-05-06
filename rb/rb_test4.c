@@ -15,7 +15,7 @@ int main()
 	char readback[12];
 	while(1==1)
 	{
-		size_t read=rb_overread(rb,readback,11);
+		int read=rb_overread(rb,readback,11);
 		rb_debug(rb);
 		readback[read]='\0';
 		fprintf(stderr,"overread: %s\n",readback);

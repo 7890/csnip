@@ -20,11 +20,11 @@ static void *reader_thread_func(void *arg)
 	rb_debug(rb_);
 	//srand(4321);
 
-	size_t buf_size=32; //22 to match write thread content size
+	int buf_size=32; //22 to match write thread content size
 	char buf[buf_size];
 	memset(buf,0,buf_size);
-	size_t read=0;
-	size_t read_total=0;
+	uint64_t read=0;
+	uint64_t read_total=0;
 
 	while(1==1)
 	{
@@ -51,7 +51,7 @@ static void *reader_thread_func(void *arg)
 
 		read_total+=read;
 
-		fprintf(stderr,"read %zu read_total %zu '%s'\n"
+		fprintf(stderr,"read %" PRId64 " read_total %" PRId64 " '%s'\n"
 			,read		//bytes read in last rb_read
 			,read_total	//bytes read relative to main read buffer pos 0
 			,buf_read	//contents that were read in last rb_read

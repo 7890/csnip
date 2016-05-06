@@ -75,7 +75,7 @@ extern "C" {
 static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
 /**< The first few bytes in a rb_t data block.*/
 
-static const float RB_VERSION=0.23;
+static const float RB_VERSION=0.24;
 /**< Version of rb.h. Changing the rb.h binary data layout can cause the loss of 
 interoperability with other programs using (including at compile time) a previous version of rb.h.*/
 
@@ -108,7 +108,6 @@ See also rb_new_shared_*() methods.*/
 
 #include <stdlib.h> //malloc, free
 #include <string.h> //memcpy
-#include <sys/types.h> //size_t
 #include <stdio.h> //fprintf
 #include <math.h> //ceil, floor
 
@@ -161,25 +160,25 @@ typedef struct
 {
   char magic[8];		/**< \brief The first 8 bytes of a ringbuffer data structure. Like in a file header, this "MAGIC" signature helps to quickly identify if these bytes could be the start of a rb.h ringbuffer data structure.*/
   float version;		/**< \brief Version of rb.h. This can be used to verify that the binary format of other rb.h in use match this one.*/
-  size_t size;			/**< \brief Size in bytes of the buffer as requested by caller.*/
-  volatile size_t read_index;	/**< \brief Absolute position (index, "pointer") in the buffer for read operations.*/
-  volatile size_t write_index;	/**< \brief Abolute position (index, "pointer") in the buffer for write operations.*/
+  uint64_t size;		/**< \brief Size in bytes of the buffer as requested by caller.*/
+  volatile uint64_t read_index;	/**< \brief Absolute position (index, "pointer") in the buffer for read operations.*/
+  volatile uint64_t write_index;/**< \brief Abolute position (index, "pointer") in the buffer for write operations.*/
   volatile int last_was_write;	/**< \brief Whether or not the last operation on the buffer was of type write (write index advanced).
 				      !last_was_write corresponds to a read operation accordingly (read pinter advanced).*/
-  int memory_locked;		/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps).*/
-  int in_shared_memory;		/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm') on a Linux system.*/
+  int32_t memory_locked;	/**< \brief Whether or not the buffer is locked to memory (if locked, no virtual memory disk swaps).*/
+  int32_t in_shared_memory;	/**< \brief Whether or not the buffer is allocated as a file in shared memory (normally found under '/dev/shm') on a Linux system.*/
 
-  int memory_lockable;		/**< \brief Whether or not the buffer can possibly be locked to memory using mlock(). This flag is 0 if rb.h is compiled with RB_DISABLE_MLOCK, 1 otherwise. */
-  int memory_shareable;		/**< \brief Whether or not the buffer can possibly be created or accessed in shared memory. This flag is 0 if rb.h is compiled with RB_DISABLE_SHM, 1 otherwise. */
-  int mutex_lockable;		/**< \brief Whether or not the buffer can possibly be locked for exclusive read or write access using pthread_mutex. This flag is 0 if rb.h is compiled with RB_DISABLE_RW_MUTEX, 1 otherwise. */
+  int32_t memory_lockable;	/**< \brief Whether or not the buffer can possibly be locked to memory using mlock(). This flag is 0 if rb.h is compiled with RB_DISABLE_MLOCK, 1 otherwise. */
+  int32_t memory_shareable;	/**< \brief Whether or not the buffer can possibly be created or accessed in shared memory. This flag is 0 if rb.h is compiled with RB_DISABLE_SHM, 1 otherwise. */
+  int32_t mutex_lockable;	/**< \brief Whether or not the buffer can possibly be locked for exclusive read or write access using pthread_mutex. This flag is 0 if rb.h is compiled with RB_DISABLE_RW_MUTEX, 1 otherwise. */
 
-  int unlink_requested;		/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free()).*/ 
+  int32_t unlink_requested;	/**< \brief If set to 1, readers and writers should consider the buffer deleted, not using it anymore (unlinking it with rb_free()).*/ 
 
-  int no_more_input_data;	/**< \brief A writer can indicate that no more data will be put to the ringbuffer, i.e. the writer finished.*/
+  int32_t no_more_input_data;	/**< \brief A writer can indicate that no more data will be put to the ringbuffer, i.e. the writer finished.*/
 
-  int sample_rate;		/**< \brief If ringbuffer is used as audio buffer, sample_rate is > 0.*/
-  int channel_count;		/**< \brief Count of channels stored in this buffer (interleaved).*/
-  int bytes_per_sample;		/**< \brief Count of bytes per audio sample.*/
+  int32_t sample_rate;		/**< \brief If ringbuffer is used as audio buffer, sample_rate is > 0.*/
+  int32_t channel_count;	/**< \brief Count of channels stored in this buffer (interleaved).*/
+  int32_t bytes_per_sample;	/**< \brief Count of bytes per audio sample.*/
 
   uint64_t total_bytes_read;	/**< \brief Total bytes read from this ringbuffer. Aadvancing the read index is iterpreted as a read operation. Internal calls are also counted. rb_reset() and rb_reset_stats() will reset this value.*/
   uint64_t total_bytes_write;	/**< \brief Total bytes written to this ringbuffer. Advancing the write index is interpreted as a write operation. Internal calls are also counted. rb_reset() and rb_reset_stats() will reset this value.*/
@@ -192,13 +191,16 @@ typedef struct
 
 #ifndef RB_DISABLE_RW_MUTEX
   pthread_mutexattr_t mutex_attributes;
-  pthread_mutex_t read_lock;		/**< \brief Mutex lock for mutually exclusive read operations.*/
-  pthread_mutex_t write_lock;		/**< \brief Mutex lock for mutually exclusive write operations.*/
+  pthread_mutex_t read_lock;	/**< \brief Mutex lock for mutually exclusive read operations.*/
+  pthread_mutex_t write_lock;	/**< \brief Mutex lock for mutually exclusive write operations.*/
+  #ifdef _32_BIT
+  //84 vs 52 bytes -> diff 32
+  char pad[32];
+  #endif
 #else
-//pad datatype to get equal header size
-  char pad[sizeof(pthread_mutexattr_t)
-    +sizeof(pthread_mutex_t)
-    +sizeof(pthread_mutex_t)];
+  //pad datatype to get equal header size
+  //char pad[sizeof(pthread_mutexattr_t)+sizeof(pthread_mutex_t)+sizeof(pthread_mutex_t)];
+  char pad[84];
 #endif
 }
 rb_t;
@@ -222,7 +224,7 @@ static inline int rb_is_unlink_requested(rb_t *rb) {return rb->unlink_requested;
 /** Access rb_t member 'unlink_requested' via method.*/
 static inline void rb_request_unlink(rb_t *rb) {rb->unlink_requested=1;}
 /** Access rb_t member 'size' via method.*/
-static inline size_t rb_size(rb_t *rb){return rb->size;}
+static inline uint64_t rb_size(rb_t *rb){return rb->size;}
 /** Access rb_t member 'shm_handle' via method.*/
 static inline char *rb_shared_memory_handle(rb_t *rb) {return rb->shm_handle;}
 /** Access rb_t member 'human_name' via method.*/
@@ -253,19 +255,19 @@ typedef struct
 {
   char  *buffer;	/**< \brief Pointer to location in main byte buffer. It correponds to a partial (segment)
 			      or full area of the main byte buffer in rb_t.*/
-  size_t size;		/**< \brief Count of bytes that can be read from the buffer region.*/
+  uint64_t size;		/**< \brief Count of bytes that can be read from the buffer region.*/
 } 
 rb_region_t;
 
 static inline void rb_set_common_init_values(rb_t *rb);
-static inline rb_t *rb_new(size_t size);
-static inline rb_t *rb_new_named(size_t size, const char *name);
-static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new(uint64_t size);
+static inline rb_t *rb_new_named(uint64_t size, const char *name);
+static inline rb_t *rb_new_audio(uint64_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
-static inline rb_t *rb_new_shared(size_t size);
+static inline rb_t *rb_new_shared(uint64_t size);
 static inline rb_t *rb_open_shared(const char *shm_handle);
-static inline rb_t *rb_new_shared_named(size_t size, const char *name);
-static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
+static inline rb_t *rb_new_shared_named(uint64_t size, const char *name);
+static inline rb_t *rb_new_shared_audio(uint64_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample);
 
 static inline void rb_free(rb_t *rb);
@@ -273,40 +275,40 @@ static inline int rb_mlock(rb_t *rb);
 static inline int rb_munlock(rb_t *rb);
 static inline int rb_is_mlocked(rb_t *rb);
 static inline int rb_is_shared(rb_t *rb);
-static inline size_t rb_size(rb_t *rb);
+static inline uint64_t rb_size(rb_t *rb);
 static inline char *rb_shared_memory_handle(rb_t *rb);
 static inline void rb_reset(rb_t *rb);
-static inline size_t rb_can_read(const rb_t *rb);
-static inline size_t rb_can_read_frames(const rb_t *rb);
-static inline size_t rb_can_write(const rb_t *rb);
-static inline size_t rb_can_write_frames(const rb_t *rb);
-static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, int over);
-static inline size_t rb_read(rb_t *rb, char *destination, size_t count);
-static inline size_t rb_overread(rb_t *rb, char *destination, size_t count);
-static inline size_t rb_write(rb_t *rb, const char *source, size_t count);
-static inline size_t rb_peek(rb_t *rb, char *destination, size_t count);
-static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_t offset);
-static inline size_t rb_drop(rb_t *rb);
-static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset);
-static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset);
-static inline size_t rb_read_byte(rb_t *rb, char *destination);
-static inline size_t rb_peek_byte(rb_t *rb, char *destination);
-static inline size_t rb_peek_byte_at(rb_t *rb, char *destination, size_t offset);
-static inline size_t rb_skip_byte(rb_t *rb);
-static inline size_t rb_write_byte(rb_t *rb, const char *source);
-static inline size_t rb_deinterleave_items(rb_t *rb, char *destination ,size_t item_count, size_t item_size, size_t initial_item_offset, size_t item_block_size);
-static inline size_t rb_deinterleave_audio(rb_t *rb, char *destination ,size_t frame_count, size_t frame_offset);
-static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int over);
-static inline size_t rb_advance_read_index(rb_t *rb, size_t count);
-static inline size_t rb_overadvance_read_index(rb_t *rb, size_t count);
-static inline size_t rb_advance_write_index(rb_t *rb, size_t count);
+static inline uint64_t rb_can_read(const rb_t *rb);
+static inline uint64_t rb_can_read_frames(const rb_t *rb);
+static inline uint64_t rb_can_write(const rb_t *rb);
+static inline uint64_t rb_can_write_frames(const rb_t *rb);
+static inline uint64_t rb_generic_read(rb_t *rb, char *destination, uint64_t count, int over);
+static inline uint64_t rb_read(rb_t *rb, char *destination, uint64_t count);
+static inline uint64_t rb_overread(rb_t *rb, char *destination, uint64_t count);
+static inline uint64_t rb_write(rb_t *rb, const char *source, uint64_t count);
+static inline uint64_t rb_peek(rb_t *rb, char *destination, uint64_t count);
+static inline uint64_t rb_peek_at(rb_t *rb, char *destination, uint64_t count, uint64_t offset);
+static inline uint64_t rb_drop(rb_t *rb);
+static inline int rb_find_byte(rb_t *rb, char byte, uint64_t *offset);
+static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, uint64_t pattern_offset, uint64_t count, uint64_t *offset);
+static inline uint64_t rb_read_byte(rb_t *rb, char *destination);
+static inline uint64_t rb_peek_byte(rb_t *rb, char *destination);
+static inline uint64_t rb_peek_byte_at(rb_t *rb, char *destination, uint64_t offset);
+static inline uint64_t rb_skip_byte(rb_t *rb);
+static inline uint64_t rb_write_byte(rb_t *rb, const char *source);
+static inline uint64_t rb_deinterleave_items(rb_t *rb, char *destination ,uint64_t item_count, uint64_t item_size, uint64_t initial_item_offset, uint64_t item_block_size);
+static inline uint64_t rb_deinterleave_audio(rb_t *rb, char *destination ,uint64_t frame_count, uint64_t frame_offset);
+static inline uint64_t rb_generic_advance_read_index(rb_t *rb, uint64_t count, int over);
+static inline uint64_t rb_advance_read_index(rb_t *rb, uint64_t count);
+static inline uint64_t rb_overadvance_read_index(rb_t *rb, uint64_t count);
+static inline uint64_t rb_advance_write_index(rb_t *rb, uint64_t count);
 static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions);
 static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions);
 static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region);
 static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region);
-static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count);
-static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count);
-static inline size_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
+static inline uint64_t rb_frame_to_byte_count(const rb_t *rb, uint64_t count);
+static inline uint64_t rb_byte_to_frame_count(const rb_t *rb, uint64_t count);
+static inline uint64_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample);
 static inline int rb_try_exclusive_read(rb_t *rb);
 static inline void rb_release_read(rb_t *rb);
 static inline int rb_try_exclusive_write(rb_t *rb);
@@ -389,7 +391,7 @@ static inline void rb_set_common_init_values(rb_t *rb)
  * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
-static inline rb_t *rb_new(size_t size)
+static inline rb_t *rb_new(uint64_t size)
 {
 	const char *a="anonymous";
 	return rb_new_audio(size,a,0,1,1);
@@ -412,7 +414,7 @@ static inline rb_t *rb_new(size_t size)
  * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
-static inline rb_t *rb_new_named(size_t size, const char *name)
+static inline rb_t *rb_new_named(uint64_t size, const char *name)
 {
 	return rb_new_audio(size,name,0,1,1);
 }
@@ -439,7 +441,7 @@ static inline rb_t *rb_new_named(size_t size, const char *name)
 //=============================================================================
 static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
-	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
+	uint64_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
 	return rb_new_audio(size,name,sample_rate,channel_count, bytes_per_sample);
 }
 
@@ -461,7 +463,7 @@ static inline rb_t *rb_new_audio_seconds(double seconds, const char *name, int s
  * @return pointer to a new rb_t if successful; NULL otherwise.
  */
 //=============================================================================
-static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_audio(uint64_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 #ifndef RB_DISABLE_SHM
 	#ifdef RB_DEFAULT_USE_SHM
@@ -493,7 +495,7 @@ static inline rb_t *rb_new_audio(size_t size, const char *name, int sample_rate,
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared(size_t size)
+static inline rb_t *rb_new_shared(uint64_t size)
 {
 	const char *a="anonymous";
 	return rb_new_shared_audio(size,a,0,1,1);
@@ -503,7 +505,7 @@ static inline rb_t *rb_new_shared(size_t size)
  * n/a
  */
 //=============================================================================
-static inline rb_t *rb_new_shared_named(size_t size, const char *name)
+static inline rb_t *rb_new_shared_named(uint64_t size, const char *name)
 {
 	return rb_new_shared_audio(size,name,0,1,1);
 }
@@ -514,7 +516,7 @@ static inline rb_t *rb_new_shared_named(size_t size, const char *name)
 //=============================================================================
 static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
-	size_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
+	uint64_t size=rb_second_to_byte_count(seconds,sample_rate,channel_count,bytes_per_sample);
 	return rb_new_shared_audio(size,name,sample_rate,channel_count, bytes_per_sample);
 }
 
@@ -557,7 +559,7 @@ static inline rb_t *rb_new_shared_audio_seconds(double seconds, const char *name
  */
 
 //=============================================================================
-static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
+static inline rb_t *rb_new_shared_audio(uint64_t size, const char *name, int sample_rate, int channel_count, int bytes_per_sample)
 {
 #ifdef RB_DISABLE_SHM
 	return NULL;
@@ -583,7 +585,7 @@ static inline rb_t *rb_new_shared_audio(size_t size, const char *name, int sampl
 		return NULL;
 	}
 
-	//void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+	//void *mmap(void *addr, uint64_t length, int prot, int flags, int fd, off_t offset);
 	rb=(rb_t*)mmap(0, sizeof(rb_t) + size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	close(fd);
 
@@ -639,7 +641,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 //	int r=ftruncate(fd,sizeof(rb_t));
 //	if(r!=0) {return NULL;}
 
-	//void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+	//void *mmap(void *addr, uint64_t length, int prot, int flags, int fd, off_t offset);
 	rb=(rb_t*)mmap(0, sizeof(rb_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 
 	if(rb==NULL || rb==MAP_FAILED)
@@ -669,8 +671,8 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 		return NULL;
 	}
 
-//	fprintf(stderr,"size %zu\n",rb->size);
-	size_t size=rb->size;
+//	fprintf(stderr,"size %" PRId64 "\n",rb->size);
+	uint64_t size=rb->size;
 
 	//unmap and remap fully (knowing size now)
 	munmap(rb,sizeof(rb_t));
@@ -715,7 +717,7 @@ static inline void rb_free(rb_t *rb)
 		//shm_unlink(rb->shm_handle);
 		char handle[255];
 		strncpy(handle,rb->shm_handle,255);
-		size_t size=rb->size;
+		uint64_t size=rb->size;
 		munmap(rb,sizeof(rb_t)+size);
 		shm_unlink(handle);
 		rb=NULL;
@@ -814,10 +816,10 @@ static inline void rb_reset(rb_t *rb)
  * @return count of bytes available to read.
  */
 //=============================================================================
-static inline size_t rb_can_read(const rb_t *rb)
+static inline uint64_t rb_can_read(const rb_t *rb)
 {
-	size_t r=rb->read_index;
-	size_t w=rb->write_index;
+	uint64_t r=rb->read_index;
+	uint64_t w=rb->write_index;
 
 	if(r==w)
 	{
@@ -832,7 +834,7 @@ static inline size_t rb_can_read(const rb_t *rb)
  * n/a
  */
 //=============================================================================
-static inline size_t rb_can_read_frames(const rb_t *rb)
+static inline uint64_t rb_can_read_frames(const rb_t *rb)
 {
 	return floor((double)rb_can_read(rb)/rb->channel_count/rb->bytes_per_sample);
 }
@@ -847,10 +849,10 @@ static inline size_t rb_can_read_frames(const rb_t *rb)
  * @return amount of free space (in bytes) available for writing.
  */
 //=============================================================================
-static inline size_t rb_can_write(const rb_t *rb)
+static inline uint64_t rb_can_write(const rb_t *rb)
 {
-	size_t r=rb->read_index;
-	size_t w=rb->write_index;
+	uint64_t r=rb->read_index;
+	uint64_t w=rb->write_index;
 
 	if(r==w)
 	{
@@ -865,7 +867,7 @@ static inline size_t rb_can_write(const rb_t *rb)
  * n/a
  */
 //=============================================================================
-static inline size_t rb_can_write_frames(const rb_t *rb)
+static inline uint64_t rb_can_write_frames(const rb_t *rb)
 {
 	return floor((double)rb_can_write(rb)/rb->channel_count/rb->bytes_per_sample);
 }
@@ -874,12 +876,12 @@ static inline size_t rb_can_write_frames(const rb_t *rb)
  * n/a
  */
 //=============================================================================
-static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, int over)
+static inline uint64_t rb_generic_read(rb_t *rb, char *destination, uint64_t count, int over)
 {
 	if(count==0) {return 0;}
 
-	size_t can_read_count;
-	size_t do_read_count;
+	uint64_t can_read_count;
+	uint64_t do_read_count;
 
 	if(over)
 	{
@@ -893,9 +895,9 @@ static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, 
 		do_read_count=count>can_read_count ? can_read_count : count;
 	}
 
-	size_t linear_end=rb->read_index+do_read_count;
-	size_t copy_count_1;
-	size_t copy_count_2;
+	uint64_t linear_end=rb->read_index+do_read_count;
+	uint64_t copy_count_1;
+	uint64_t copy_count_2;
 
 	if(linear_end>rb->size)
 	{
@@ -949,7 +951,7 @@ static inline size_t rb_generic_read(rb_t *rb, char *destination, size_t count, 
  * @return count of bytes read, which may range from 0 to count.
  */
 //=============================================================================
-static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
+static inline uint64_t rb_read(rb_t *rb, char *destination, uint64_t count)
 {
 	return rb_generic_read(rb,destination,count,0);
 }
@@ -978,7 +980,7 @@ static inline size_t rb_read(rb_t *rb, char *destination, size_t count)
  * @return count of bytes read, which may range from 0 to rb_size().
  */
 //=============================================================================
-static inline size_t rb_overread(rb_t *rb, char *destination, size_t count)
+static inline uint64_t rb_overread(rb_t *rb, char *destination, uint64_t count)
 {
 	return rb_generic_read(rb,destination,count,1);
 }
@@ -997,13 +999,13 @@ static inline size_t rb_overread(rb_t *rb, char *destination, size_t count)
  * @return count of bytes written, which may range from 0 to count
  */
 //=============================================================================
-static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
+static inline uint64_t rb_write(rb_t *rb, const char *source, uint64_t count)
 {
-	size_t can_write_count;
-	size_t do_write_count;
-	size_t linear_end;
-	size_t copy_count_1;
-	size_t copy_count_2;
+	uint64_t can_write_count;
+	uint64_t do_write_count;
+	uint64_t linear_end;
+	uint64_t copy_count_1;
+	uint64_t copy_count_2;
 
 	if(!(can_write_count=rb_can_write(rb)))
 	{
@@ -1060,7 +1062,7 @@ static inline size_t rb_write(rb_t *rb, const char *source, size_t count)
  * @return count of bytes read, which may range from 0 to count.
  */
 //=============================================================================
-static inline size_t rb_peek(rb_t *rb, char *destination, size_t count)
+static inline uint64_t rb_peek(rb_t *rb, char *destination, uint64_t count)
 {
 	return rb_peek_at(rb,destination,count,0);
 }
@@ -1085,10 +1087,10 @@ static inline size_t rb_peek(rb_t *rb, char *destination, size_t count)
  * @return count of bytes read, which may range from 0 to count.
  */
 //=============================================================================
-static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_t offset)
+static inline uint64_t rb_peek_at(rb_t *rb, char *destination, uint64_t count, uint64_t offset)
 {
 	if(count==0) {return 0;}
-	size_t can_read_count;
+	uint64_t can_read_count;
 	//can not read more than offset, no chance to read from there
 	if((can_read_count=rb_can_read(rb))<=offset)
 	{
@@ -1096,13 +1098,13 @@ static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_
 		return 0;
 	}
 	//limit read count respecting offset
-	size_t do_read_count=count>can_read_count-offset ? can_read_count-offset : count;
+	uint64_t do_read_count=count>can_read_count-offset ? can_read_count-offset : count;
 	//adding the offset, knowing it could be beyond buffer end
-	size_t tmp_read_index=rb->read_index+offset;
+	uint64_t tmp_read_index=rb->read_index+offset;
 	//including all: current read index + offset + limited read count
-	size_t linear_end=tmp_read_index+do_read_count;
-	size_t copy_count_1;
-	size_t copy_count_2;
+	uint64_t linear_end=tmp_read_index+do_read_count;
+	uint64_t copy_count_1;
+	uint64_t copy_count_2;
 
 	//beyond
 	if(linear_end>rb->size)
@@ -1151,7 +1153,7 @@ static inline size_t rb_peek_at(rb_t *rb, char *destination, size_t count, size_
  * @return count of bytes dropped, which may range from 0 to rb->size.
  */
 //=============================================================================
-static inline size_t rb_drop(rb_t *rb)
+static inline uint64_t rb_drop(rb_t *rb)
 {
 	return rb_advance_read_index(rb,rb_can_read(rb));
 }
@@ -1164,26 +1166,26 @@ static inline size_t rb_drop(rb_t *rb)
  *
  * @param rb pointer to the ringbuffer structure.
  * @param byte byte to search in the ringbuffer's readable space
- * @param offset pointer to a size_t variable
+ * @param offset pointer to a uint64_t variable
  *
  * @return 1 if found; 0 otherwise.
  */
 //=============================================================================
-static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset)
+static inline int rb_find_byte(rb_t *rb, char byte, uint64_t *offset)
 {
-	size_t off=0;
+	uint64_t off=0;
 	char c;
 	while(rb_peek_byte_at(rb,&c,off))
 	{
 		if(c==byte)
 		{
-			memcpy(offset,&(off),sizeof(size_t)); //hmmm.
+			memcpy(offset,&(off),sizeof(uint64_t)); //hmmm.
 			return 1;
 		}
 		off++;
 	}
 	off=0;
-	memcpy(offset,&(off),sizeof(size_t));
+	memcpy(offset,&(off),sizeof(uint64_t));
 	return 0;
 }
 
@@ -1201,7 +1203,7 @@ static inline int rb_find_byte(rb_t *rb, char byte, size_t *offset)
  * @return count of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
-static inline size_t rb_read_byte(rb_t *rb, char *destination)
+static inline uint64_t rb_read_byte(rb_t *rb, char *destination)
 {
 	return rb_read(rb,destination,1);
 }
@@ -1217,7 +1219,7 @@ static inline size_t rb_read_byte(rb_t *rb, char *destination)
  * @return count of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
-static inline size_t rb_peek_byte(rb_t *rb, char *destination)
+static inline uint64_t rb_peek_byte(rb_t *rb, char *destination)
 {
 	return rb_peek_byte_at(rb,destination,0);
 }
@@ -1234,16 +1236,16 @@ static inline size_t rb_peek_byte(rb_t *rb, char *destination)
  * @return count of bytes read, which may range from 0 to 1.
  */
 //=============================================================================
-static inline size_t rb_peek_byte_at(rb_t *rb, char *destination, size_t offset)
+static inline uint64_t rb_peek_byte_at(rb_t *rb, char *destination, uint64_t offset)
 {
-	size_t can_read_count;
+	uint64_t can_read_count;
 	if((can_read_count=rb_can_read(rb))<=offset)
 	{
 		rb->total_underflows++;
 		return 0;
 	}
 
-	size_t tmp_read_index=rb->read_index+offset;
+	uint64_t tmp_read_index=rb->read_index+offset;
 
 	if(rb->size<=tmp_read_index)
 	{
@@ -1269,7 +1271,7 @@ static inline size_t rb_peek_byte_at(rb_t *rb, char *destination, size_t offset)
  * @return count of bytes skipped, which may range from 0 to 1.
  */
 //=============================================================================
-static inline size_t rb_skip_byte(rb_t *rb)
+static inline uint64_t rb_skip_byte(rb_t *rb)
 {
 	return rb_advance_read_index(rb,1);
 }
@@ -1286,7 +1288,7 @@ static inline size_t rb_skip_byte(rb_t *rb)
  * @return count of bytes written, which may range from 0 to 1.
  */
 //=============================================================================
-static inline size_t rb_write_byte(rb_t *rb, const char *source)
+static inline uint64_t rb_write_byte(rb_t *rb, const char *source)
 {
 	return rb_write(rb,source,1);
 }
@@ -1295,8 +1297,8 @@ static inline size_t rb_write_byte(rb_t *rb, const char *source)
  * n/a
  */
 //=============================================================================
-static inline size_t rb_deinterleave_items(rb_t *rb, char *destination
-	,size_t item_count, size_t item_size, size_t initial_item_offset, size_t item_block_size)
+static inline uint64_t rb_deinterleave_items(rb_t *rb, char *destination
+	,uint64_t item_count, uint64_t item_size, uint64_t initial_item_offset, uint64_t item_block_size)
 {
 /*
               offset
@@ -1309,17 +1311,17 @@ can_read min one channel: initial_offset * item_size + (item_count -1 ) * item_s
                                                                                        |for all channels in block
 */
 
-	size_t initial_bytepos=initial_item_offset * item_size;
-	size_t concerned_block_size=(item_count - 1) * item_size * item_block_size + item_size;
+	uint64_t initial_bytepos=initial_item_offset * item_size;
+	uint64_t concerned_block_size=(item_count - 1) * item_size * item_block_size + item_size;
 
 	if(rb_can_read(rb) < initial_bytepos + concerned_block_size) {return 0;}
 
 	char *destination_ptr=destination;
 
-	size_t bytepos=0;
+	uint64_t bytepos=0;
 	for(bytepos=0;bytepos < initial_bytepos + concerned_block_size;bytepos+=item_size * item_block_size)
 	{
-//		fprintf(stderr,"offset + bytepos: %zu\n",initial_bytepos+bytepos);
+//		fprintf(stderr,"offset + bytepos: %" PRId64 "\n",initial_bytepos+bytepos);
 		rb_peek_at(rb, destination_ptr,item_size,initial_bytepos+bytepos);
 		destination_ptr+=item_size;
 	}
@@ -1330,7 +1332,7 @@ can_read min one channel: initial_offset * item_size + (item_count -1 ) * item_s
  * n/a
  */
 //=============================================================================
-static inline size_t rb_deinterleave_audio(rb_t *rb, char *destination ,size_t frame_count, size_t frame_offset)
+static inline uint64_t rb_deinterleave_audio(rb_t *rb, char *destination ,uint64_t frame_count, uint64_t frame_offset)
 {
 	return rb_deinterleave_items(rb, destination
 		,frame_count, rb->bytes_per_sample, frame_offset, rb->channel_count);
@@ -1340,11 +1342,11 @@ static inline size_t rb_deinterleave_audio(rb_t *rb, char *destination ,size_t f
  * n/a
  */
 //=============================================================================
-static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int over)
+static inline uint64_t rb_generic_advance_read_index(rb_t *rb, uint64_t count, int over)
 {
 	if(count==0) {return 0;}
-	size_t can_read_count;
-	size_t do_advance_count;
+	uint64_t can_read_count;
+	uint64_t do_advance_count;
 
 	if(over)
 	{
@@ -1361,9 +1363,9 @@ static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int o
 		}
 		do_advance_count=count>can_read_count ? can_read_count : count;
 	}
-	size_t r=rb->read_index;
-	size_t linear_end=r+do_advance_count;
-	size_t tmp_read_index=linear_end>rb->size ? linear_end-rb->size : r+do_advance_count;
+	uint64_t r=rb->read_index;
+	uint64_t linear_end=r+do_advance_count;
+	uint64_t tmp_read_index=linear_end>rb->size ? linear_end-rb->size : r+do_advance_count;
 
 	rb->read_index=(tmp_read_index%=rb->size);
 
@@ -1401,7 +1403,7 @@ static inline size_t rb_generic_advance_read_index(rb_t *rb, size_t count, int o
  * @return count of bytes advanced, which may range from 0 to count.
  */
 //=============================================================================
-static inline size_t rb_advance_read_index(rb_t *rb, size_t count)
+static inline uint64_t rb_advance_read_index(rb_t *rb, uint64_t count)
 {
 	return rb_generic_advance_read_index(rb,count,0);
 }
@@ -1410,7 +1412,7 @@ static inline size_t rb_advance_read_index(rb_t *rb, size_t count)
 * n/a
 */
 //=============================================================================
-static inline size_t rb_overadvance_read_index(rb_t *rb, size_t count)
+static inline uint64_t rb_overadvance_read_index(rb_t *rb, uint64_t count)
 {
 	return rb_generic_advance_read_index(rb,count,1);
 }
@@ -1436,20 +1438,20 @@ static inline size_t rb_overadvance_read_index(rb_t *rb, size_t count)
  * @return count of bytes advanced, which may range from 0 to count
  */
 //=============================================================================
-static inline size_t rb_advance_write_index(rb_t *rb, size_t count)
+static inline uint64_t rb_advance_write_index(rb_t *rb, uint64_t count)
 {
 	if(count==0) {return 0;}
-	size_t can_write_count;
+	uint64_t can_write_count;
 	if(!(can_write_count=rb_can_write(rb)))
 	{
 		rb->total_overflows++;
 		return 0;
 	}
 
-	size_t do_advance_count=count>can_write_count ? can_write_count : count;
-	size_t w=rb->write_index;
-	size_t linear_end=w+do_advance_count;
-	size_t tmp_write_index=linear_end>rb->size ? linear_end-rb->size : w+do_advance_count;
+	uint64_t do_advance_count=count>can_write_count ? can_write_count : count;
+	uint64_t w=rb->write_index;
+	uint64_t linear_end=w+do_advance_count;
+	uint64_t tmp_write_index=linear_end>rb->size ? linear_end-rb->size : w+do_advance_count;
 
 	rb->write_index=(tmp_write_index%=rb->size);
 	rb->last_was_write=1;
@@ -1489,9 +1491,9 @@ static inline size_t rb_advance_write_index(rb_t *rb, size_t count)
 //=============================================================================
 static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions)
 {
-	size_t can_read_count=rb_can_read(rb);
-	size_t r=rb->read_index;
-	size_t linear_end=r+can_read_count;
+	uint64_t can_read_count=rb_can_read(rb);
+	uint64_t r=rb->read_index;
+	uint64_t linear_end=r+can_read_count;
 
 	if(linear_end>rb->size)
 	{
@@ -1539,9 +1541,9 @@ static inline void rb_get_read_regions(const rb_t *rb, rb_region_t *regions)
 //=============================================================================
 static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions)
 {
-	size_t can_write_count=rb_can_write(rb);
-	size_t w=rb->write_index;
-	size_t linear_end=w+can_write_count;
+	uint64_t can_write_count=rb_can_write(rb);
+	uint64_t w=rb->write_index;
+	uint64_t linear_end=w+can_write_count;
 
 	if(linear_end>rb->size)
 	{
@@ -1575,9 +1577,9 @@ static inline void rb_get_write_regions(const rb_t *rb, rb_region_t *regions)
 //=============================================================================
 static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region)
 {
-	size_t can_read_count=rb_can_read(rb);
-	size_t r=rb->read_index;
-	size_t linear_end=r+can_read_count;
+	uint64_t can_read_count=rb_can_read(rb);
+	uint64_t r=rb->read_index;
+	uint64_t linear_end=r+can_read_count;
 
 	if(linear_end>rb->size)
 	{
@@ -1604,9 +1606,9 @@ static inline void rb_get_next_read_region(const rb_t *rb, rb_region_t *region)
 //=============================================================================
 static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region)
 {
-	size_t can_write_count=rb_can_write(rb);
-	size_t w=rb->write_index;
-	size_t linear_end=w+can_write_count;
+	uint64_t can_write_count=rb_can_write(rb);
+	uint64_t w=rb->write_index;
+	uint64_t linear_end=w+can_write_count;
 
 	if(linear_end>rb->size)
 	{
@@ -1630,18 +1632,18 @@ static inline void rb_get_next_write_region(const rb_t *rb, rb_region_t *region)
  * @param pattern byte sequence to search in the ringbuffer's readable space
  * @param pattern_offset offset to apply to the byte sequence
  * @param count count of bytes to consider for matching in the byte sequence, starting from offset
- * @param offset pointer to a size_t variable
+ * @param offset pointer to a uint64_t variable
  *
  * @return 1 if found; 0 otherwise.
  */
 //=============================================================================
-static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_offset, size_t count, size_t *offset)
+static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, uint64_t pattern_offset, uint64_t count, uint64_t *offset)
 {
 	char *tmp_pattern=pattern;
 	tmp_pattern+=pattern_offset;
 
 	char compare_buffer[count];
-	size_t off=0;
+	uint64_t off=0;
 	char c;
 	while(rb_peek_byte_at(rb,&c,off))
 	{
@@ -1652,7 +1654,7 @@ static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_
 			{
 				if(!memcmp(tmp_pattern,compare_buffer,count))
 				{
-					memcpy(offset,&(off),sizeof(size_t)); //hmmm.
+					memcpy(offset,&(off),sizeof(uint64_t)); //hmmm.
 					return 1;
 				}
 			}
@@ -1662,7 +1664,7 @@ static inline int rb_find_byte_sequence(rb_t *rb, char *pattern, size_t pattern_
 	}
 _not_found:
 	off=0;
-	memcpy(offset,&(off),sizeof(size_t));
+	memcpy(offset,&(off),sizeof(uint64_t));
 	return 0;
 }
 
@@ -1721,7 +1723,7 @@ static inline void *buf_ptr(const rb_t *rb)
  * @return count of bytes corresponding to the given multichannel frame count.
  */
 //=============================================================================
-static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count)
+static inline uint64_t rb_frame_to_byte_count(const rb_t *rb, uint64_t count)
 {
 	return count * rb->channel_count * rb->bytes_per_sample;	
 }
@@ -1735,9 +1737,9 @@ static inline size_t rb_frame_to_byte_count(const rb_t *rb, size_t count)
  * @return count of multichannel frames corresponding to the given byte count.
  */
 //=============================================================================
-static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count)
+static inline uint64_t rb_byte_to_frame_count(const rb_t *rb, uint64_t count)
 {
-	return (size_t)(count/rb->channel_count/rb->bytes_per_sample);
+	return (uint64_t)(count/rb->channel_count/rb->bytes_per_sample);
 }
 
 /**
@@ -1750,9 +1752,9 @@ static inline size_t rb_byte_to_frame_count(const rb_t *rb, size_t count)
  * @return duration [s] of audio corresponding to the given audiosample data properties.
  */
 //=============================================================================
-static inline size_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
+static inline uint64_t rb_second_to_byte_count(double seconds, int sample_rate, int channel_count, int bytes_per_sample)
 {
-	size_t frames=ceil(seconds*sample_rate);
+	uint64_t frames=ceil(seconds*sample_rate);
 	return frames * channel_count * bytes_per_sample;
 }
 
@@ -1850,7 +1852,7 @@ static inline void rb_debug(const rb_t *rb)
 		fprintf(stderr,"rb is NULL\n");
 		return;
 	}
-	fprintf(stderr,"can read: %zu @ %zu  can write: %zu @ %zu last was: %s mlock: %s shm: %s %s\n"
+	fprintf(stderr,"can read: %" PRId64 " @ %" PRId64 "  can write: %" PRId64 " @ %" PRId64 " last was: %s mlock: %s shm: %s %s\n"
 		,rb_can_read(rb)
 		,rb->read_index
 		,rb_can_write(rb)
@@ -1892,7 +1894,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 		,rb->human_name);
 	if(rb->sample_rate>0)
 	{
-		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\nmultichannel frames can read: %8zu can write: %8zu\n"
+		fprintf(stderr,"audio: %3d channels @ %6d Hz, %2d bytes per sample, capacity %9.3f s\nmultichannel frames can read: %8" PRId64 " can write: %8" PRId64 "\n"
 			,rb->channel_count
 			,rb->sample_rate
 			,rb->bytes_per_sample
@@ -1917,7 +1919,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 	);
 
 	int bar_ticks_count=45;
-	size_t can_w=rb_can_write(rb);
+	uint64_t can_w=rb_can_write(rb);
 	float fill_level;
 	if(can_w==0)
 	{
@@ -1947,7 +1949,7 @@ static inline void rb_debug_linearbar(const rb_t *rb)
 	}
 	else
 	{
-		fprintf(stderr,"fill %.6f [%*.*s%s%*s] %10zu\n"
+		fprintf(stderr,"fill %.6f [%*.*s%s%*s] %10" PRId64 "\n"
 			,fill_level
 			,bar_ticks_show
 			,bar_ticks_show
@@ -1974,14 +1976,14 @@ static inline void rb_print_regions(const rb_t *rb)
 {
 	rb_region_t data[2];
 	rb_get_read_regions(rb,data);
-	fprintf(stderr,"read region size  %zu %zu =%zu  "
+	fprintf(stderr,"read region size  %" PRId64 " %" PRId64 " =%" PRId64 "  "
 		,data[0].size
 		,data[1].size
 		,data[0].size+data[1].size
 	);
 
 	rb_get_write_regions(rb,data);
-	fprintf(stderr,"write region size %zu %zu =%zu\n"
+	fprintf(stderr,"write region size %" PRId64 " %" PRId64 " =%" PRId64 "\n"
 		,data[0].size
 		,data[1].size
 		,data[0].size+data[1].size
@@ -1992,13 +1994,13 @@ static inline void rb_print_regions(const rb_t *rb)
 //"ALIASES"
 
 /**\brief This is an alias to rb_advance_read_index().*/
-static inline size_t rb_skip(rb_t *rb, size_t count) {return rb_advance_read_index(rb,count);}
+static inline uint64_t rb_skip(rb_t *rb, uint64_t count) {return rb_advance_read_index(rb,count);}
 
 /**\brief This is an alias to rb_drop().*/
-static inline size_t rb_skip_all(rb_t *rb) {return rb_drop(rb);}
+static inline uint64_t rb_skip_all(rb_t *rb) {return rb_drop(rb);}
 
 /**\brief This is an alias to rb_overadvance_read_index().*/
-static inline size_t rb_overskip(rb_t *rb, size_t count) {return rb_overadvance_read_index(rb,count);}
+static inline uint64_t rb_overskip(rb_t *rb, uint64_t count) {return rb_overadvance_read_index(rb,count);}
 
 //doxygen sets this to include normally unset preprocessor defines in the documentation
 #ifdef DOXYGEN
@@ -2014,15 +2016,15 @@ static inline size_t rb_overskip(rb_t *rb, size_t count) {return rb_overadvance_
 //(sed 's/jack_ringbuffer_/rb_/g')
 
 /**\brief This is an alias to rb_new(). Part of aliases set 1 (RB_ALIASES_1).*/
-static inline rb_t *rb_create(size_t size)			{return rb_new(size);}
+static inline rb_t *rb_create(uint64_t size)			{return rb_new(size);}
 /**\brief This is an alias to rb_can_read(). Part of aliases set 1 (RB_ALIASES_1).*/
-static inline size_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
+static inline uint64_t rb_read_space(const rb_t *rb)		{return rb_can_read(rb);}
 /**\brief This is an alias to rb_can_write(). Part of aliases set 1 (RB_ALIASES_1).*/
-static inline size_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
+static inline uint64_t rb_write_space(const rb_t *rb)		{return rb_can_write(rb);}
 /**\brief This is an alias to rb_advance_read_index(). Part of aliases set 1 (RB_ALIASES_1).*/
-static inline size_t rb_read_advance(rb_t *rb, size_t count)	{return rb_advance_read_index(rb,count);}
+static inline uint64_t rb_read_advance(rb_t *rb, uint64_t count)	{return rb_advance_read_index(rb,count);}
 /**\brief This is an alias to rb_advance_write_index(). Part of aliases set 1 (RB_ALIASES_1).*/
-static inline size_t rb_write_advance(rb_t *rb, size_t count)	{return rb_advance_write_index(rb,count);}
+static inline uint64_t rb_write_advance(rb_t *rb, uint64_t count)	{return rb_advance_write_index(rb,count);}
 /**\brief This is an alias to rb_rb_get_read_regions). Part of aliases set 1 (RB_ALIASES_1).*/
 static inline void rb_get_read_vector(const rb_t *rb, rb_region_t *regions) {return rb_get_read_regions(rb,regions);}
 /**\brief This is an alias to rb_rb_get_write_regions(). Part of aliases set 1 (RB_ALIASES_1).*/
@@ -2035,7 +2037,7 @@ static inline void rb_get_write_vector(const rb_t *rb, rb_region_t *regions) {re
 //http://svn.drobilla.net/lad/trunk/raul/raul/RingBuffer.hpp
 
 /**\brief This is an alias to rb_size(). Part of aliases set 2 (RB_ALIASES_2).*/
-static inline size_t rb_capacity(rb_t *rb)	{return rb_size(rb);}
+static inline uint64_t rb_capacity(rb_t *rb)	{return rb_size(rb);}
 /**\brief This is an alias to rb_reset(). Part of aliases set 2 (RB_ALIASES_2).*/
 static inline void rb_clear(rb_t *rb)		{rb_reset(rb);}
 /**\brief This is an alias to rb_free(). Part of aliases set 2 (RB_ALIASES_2).*/
