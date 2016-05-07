@@ -47,6 +47,8 @@ rb:	rb.h rb_test0.c rb_test1.c rb_test2.c rb_test3.c rb_test4.c rb_shared_reader
 
 	$(CC) -o rb_new rb_new.c -lpthread -lrt -luuid	$(CFLAGS)
 
+	$(CC) -o img_cat img_cat.c -lpthread -lrt -luuid	$(CFLAGS)
+
 	$(CC) -o rb_show_fill rb_show_fill.c -lpthread -lrt -luuid -lm $(CFLAGS)
 
 doc:	rb.h doxyfile img/drawing_ringbuffer_1_path.svg img/drawing_ringbuffer_1_path.eps
@@ -69,11 +71,13 @@ install:
 	install -m755 rb_show_fill $(DESTDIR)$(PREFIX)/bin
 	install -m755 rb_cat $(DESTDIR)$(PREFIX)/bin
 	install -m755 rb_new $(DESTDIR)$(PREFIX)/bin
+	install -m755 img_cat $(DESTDIR)$(PREFIX)/bin
 
 uninstall:
 	-rm -f $(DESTDIR)$(PREFIX)/bin/rb_show_fill
 	-rm -f $(DESTDIR)$(PREFIX)/bin/rb_cat
 	-rm -f $(DESTDIR)$(PREFIX)/bin/rb_new
+	-rm -f $(DESTDIR)$(PREFIX)/bin/img_cat
 
 clean:
 	-rm -f rb_test0
@@ -87,4 +91,5 @@ clean:
 	-rm -f rb_show_fill
 	-rm -f rb_cat
 	-rm -f rb_new
+	-rm -f img_cat
 	-rm -rf doc
