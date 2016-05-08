@@ -1001,6 +1001,8 @@ static inline uint64_t rb_overread(rb_t *rb, char *destination, uint64_t count)
 //=============================================================================
 static inline uint64_t rb_write(rb_t *rb, const char *source, uint64_t count)
 {
+	if(count==0) {return 0;}
+
 	uint64_t can_write_count;
 	uint64_t do_write_count;
 	uint64_t linear_end;
