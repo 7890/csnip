@@ -61,37 +61,24 @@ int size
 	int headersize=sizeof(imgframe_t);
 
 	//write header
-	int canwrite=0;
-	int dowrite=0;
 	int didwrite=0;
 	while(didwrite<headersize)
 	{
-		canwrite=rb_can_write(rb_);
-//		fprintf(stderr,"cat write %d bytes\n",canwrite);
-		dowrite=MIN((headersize-didwrite),canwrite);
-//		fprintf(stderr,"do write %d bytes\n",dowrite);
-		didwrite+=rb_write(rb_,(void*)img_null_header+didwrite,dowrite);
+		didwrite+=rb_write(rb_,(void*)img_null_header+didwrite,(headersize-didwrite));
 //		fprintf(stderr,"did write %d bytes\n",didwrite);
 		usleep(500);
 	}
 
 	buf=calloc(bufsize,1);
 
-	int ret_read=0;
-	while((ret_read = read(file_fd, buf, bufsize)) > 0)
+	int count=0;
+	while((count = read(file_fd, buf, bufsize)) > 0)
 	{
-//		fprintf(stderr,"ret_read %d\n",ret_read);
-		int canwrite=0;
-		int dowrite=0;
+//		fprintf(stderr,"count %d\n",count);
 		int didwrite=0;
-		while(didwrite<ret_read)
+		while(didwrite<count)
 		{
-
-			canwrite=rb_can_write(rb_);
-//			fprintf(stderr,"cat write %d bytes\n",canwrite);
-			dowrite=MIN((ret_read-didwrite),canwrite);
-//			fprintf(stderr,"do write %d bytes\n",dowrite);
-			didwrite+=rb_write(rb_,buf+didwrite,dowrite);
+			didwrite+=rb_write(rb_,buf+didwrite,(count-didwrite));
 //			fprintf(stderr,"did write %d bytes\n",didwrite);
 			usleep(500);
 		}

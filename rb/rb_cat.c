@@ -63,21 +63,16 @@ int main(int argc, char *argv[])
 	}
 	else
 	{
+		int count=0;
 		while(1==1)
 		{
-			int count=read(STDIN_FILENO, buf, bufsize);
+			count=read(STDIN_FILENO, buf, bufsize);
 //			fprintf(stderr,"read %d bytes from stdin\n",count);
 			if(count<1){break;}
-			int canwrite=0;
-			int dowrite=0;
 			int didwrite=0;
 			while(didwrite<count)
 			{
-				canwrite=rb_can_write(rb_);
-//				fprintf(stderr,"cat write %dbytes\n",canwrite);
-				dowrite=MIN((count-didwrite),canwrite);
-//				fprintf(stderr,"do write %d bytes\n",dowrite);
-				didwrite+=rb_write(rb_,buf+didwrite,dowrite);
+				didwrite+=rb_write(rb_,buf+didwrite,(count-didwrite));
 //				fprintf(stderr,"did write %d bytes\n",didwrite);
 				usleep(500);
 			}
