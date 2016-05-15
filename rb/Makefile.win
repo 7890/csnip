@@ -1,0 +1,28 @@
+CC = i686-w64-mingw32-gcc
+
+CFLAGS := -D_32_BIT
+
+CFLAGS := -DWIN_BUILD -O3 -fomit-frame-pointer -Lwin win/libmman.a win/libuuid.a
+#-Wall
+
+PREFIX=/usr/local
+
+default: rb
+
+all: rb doc
+
+rb:	rb.h rb_test0.c rb_test1.c rb_test2.c rb_test3.c rb_test4.c rb_shared_reader.c rb_shared_writer.c
+	$(CC) -o rb_test0.exe rb_test0.c $(CFLAGS)
+#	$(CC) -o rb_shared_reader.exe rb_shared_reader.c $(CFLAGS)
+#	$(CC) -o rb_shared_writer.exe rb_shared_writer.c $(CFLAGS)
+	$(CC) -o rb_cat.exe rb_cat.c $(CFLAGS)
+	$(CC) -o rb_new.exe rb_new.c $(CFLAGS)
+	$(CC) -o img_cat.exe img_cat.c $(CFLAGS)
+	$(CC) -o rb_show_fill.exe rb_show_fill.c $(CFLAGS)
+
+clean:
+	-rm -f rb_test0.exe
+	-rm -f rb_show_fill.exe
+	-rm -f rb_cat.exe
+	-rm -f rb_new.exe
+	-rm -f img_cat.exe
