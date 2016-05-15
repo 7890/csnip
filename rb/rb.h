@@ -104,6 +104,10 @@ See also rb_new_shared().*/
 /**< If defined (without value), rb_new_(!shared)*() functions will implicitely use shared memory backed storage.
 Otherwise rb_new_(!shared)*() functions will use malloc(), in private heap storage.
 See also rb_new_shared_*() methods.*/
+
+#define WIN_BUILD
+/**< If defined (without value), prepare for windows build */
+
 #endif
 
 #include <stdlib.h> //malloc, free
@@ -112,20 +116,37 @@ See also rb_new_shared_*() methods.*/
 #include <math.h> //ceil, floor
 
 #include <inttypes.h> //uint8_t
+#include <errno.h> //strerror
+
+#ifdef WIN_BUILD
+	//no win pthread support atm
+	#define RB_DISABLE_RW_MUTEX
+#endif
 
 #ifndef RB_DISABLE_MLOCK
-	#include <sys/mman.h> //mlock, munlock
+	#ifndef WIN_BUILD
+		#include <sys/mman.h> //mlock, munlock
+	#else
+		#include "win/mman.h"
+	#endif
 #endif
+
 #ifndef RB_DISABLE_RW_MUTEX
 	#include <pthread.h> //pthread_mutex_init, pthread_mutex_lock ..
 #endif
+
 #ifndef RB_DISABLE_SHM
-	#include <sys/mman.h> //mmap
+	#ifndef WIN_BUILD
+		#include <sys/mman.h> //mmap
+		#include <sys/shm.h> //shm_open, shm_unlink, mmap
+		#include <uuid/uuid.h> //uuid_generate_time_safe
+	#else
+		#include "win/mman.h"
+		#include "win/uuid.h" //uuid_generate_time_safe
+	#endif
 	#include <unistd.h> //ftruncate
 	#include <fcntl.h> //constants O_CREAT, ..
 	#include <sys/stat.h> //
-	#include <sys/shm.h> //shm_open, shm_unlink, mmap
-	#include <uuid/uuid.h> //uuid_generate_time_safe
 #endif
 
 #ifndef MIN
@@ -317,6 +338,41 @@ static inline void *buf_ptr(const rb_t *rb);
 static inline void rb_debug(const rb_t *rb);
 static inline void rb_debug_linearbar(const rb_t *rb);
 static inline void rb_print_regions(const rb_t *rb);
+
+/*
+*/
+//=============================================================================
+static inline int _shm_open(const char *shm_handle,int oflag, mode_t mode)
+{
+#ifndef RB_DISABLE_SHM
+	#ifndef WIN_BUILD
+		//int shm_open(const char *name, int oflag, mode_t mode);
+		return shm_open(shm_handle,oflag,mode);
+	#else
+		mode=S_IRUSR | S_IWUSR;
+		return open(shm_handle, oflag, mode);
+	#endif
+#else
+	return -1;
+#endif
+}
+
+/*
+*/
+//=============================================================================
+static inline int _shm_unlink(const char *shm_handle)
+{
+#ifndef RB_DISABLE_SHM
+	#ifndef WIN_BUILD
+		//int shm_unlink(const char *name);
+		return shm_unlink(shm_handle);
+	#else
+		///unmap
+	#endif
+#else
+	return -1;
+#endif
+}
 
 /**
  * Used internally while creating new instances of rb_t.
@@ -575,13 +631,13 @@ static inline rb_t *rb_new_shared_audio(uint64_t size, const char *name, int sam
 	uuid_unparse_lower(uuid, shm_handle);
 
 	//O_TRUNC |
-	int fd=shm_open(shm_handle,O_CREAT | O_RDWR, 0666);
+	int fd=_shm_open(shm_handle,O_CREAT | O_RDWR, 0666);
 	if(fd<0) {return NULL;}
 
 	int r=ftruncate(fd,sizeof(rb_t) + size);
 	if(r!=0)
 	{	close(fd);
-		shm_unlink(shm_handle);
+		_shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -591,7 +647,8 @@ static inline rb_t *rb_new_shared_audio(uint64_t size, const char *name, int sam
 
 	if(rb==NULL || rb==MAP_FAILED)
 	{
-		shm_unlink(shm_handle);
+		fprintf(stderr,"rb.h: MAP_FAILED %d %s\n",errno,strerror(errno));
+		_shm_unlink(shm_handle);
 		return NULL;
 	}
 //	fprintf(stderr,"rb address %lu\n",(unsigned long int)rb);
@@ -634,7 +691,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 #else
 	rb_t *rb;
 	//O_TRUNC | O_CREAT | 
-	int fd=shm_open(shm_handle,O_RDWR, 0666);
+	int fd=_shm_open(shm_handle,O_RDWR, 0666);
 	if(fd<0) {return NULL;}
 
 //??
@@ -647,7 +704,8 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 	if(rb==NULL || rb==MAP_FAILED)
 	{
 		close(fd);
-		shm_unlink(shm_handle);
+		fprintf(stderr,"rb.h: MAP_FAILED %d %s\n",errno,strerror(errno));
+		_shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -657,7 +715,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 			,RB_MAGIC,rb->magic);
 		close(fd);
 		munmap(rb,sizeof(rb_t));
-		shm_unlink(shm_handle);
+		_shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -667,7 +725,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 			,RB_VERSION,rb->version);
 		close(fd);
 		munmap(rb,sizeof(rb_t));
-		shm_unlink(shm_handle);
+		_shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -681,7 +739,7 @@ static inline rb_t *rb_open_shared(const char *shm_handle)
 
 	if(rb==NULL || rb==MAP_FAILED)
 	{
-		shm_unlink(shm_handle);
+		_shm_unlink(shm_handle);
 		return NULL;
 	}
 
@@ -719,7 +777,7 @@ static inline void rb_free(rb_t *rb)
 		strncpy(handle,rb->shm_handle,255);
 		uint64_t size=rb->size;
 		munmap(rb,sizeof(rb_t)+size);
-		shm_unlink(handle);
+		_shm_unlink(handle);
 		rb=NULL;
 		return;
 	}
