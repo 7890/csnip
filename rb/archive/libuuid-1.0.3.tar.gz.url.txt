@@ -1,0 +1,4 @@
+https://sourceforge.net/projects/libuuid/
+http://downloads.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz?r=https%3A%2F%2Fsourceforge.net%2Fprojects%2Flibuuid%2F&ts=1463076753&use_mirror=pilotfiber
+Thu May 12 20:13:59 CEST 2016
+
