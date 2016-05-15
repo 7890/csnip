@@ -1,5 +1,4 @@
 #include <unistd.h>
-#include <pthread.h>
 #include <sys/stat.h>
 #include "rb.h"
 #include "imgframe_t.h"

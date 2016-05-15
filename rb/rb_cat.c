@@ -1,5 +1,4 @@
 #include <unistd.h>
-#include <pthread.h>
 #include "rb.h"
 
 #define RB_READ 1
