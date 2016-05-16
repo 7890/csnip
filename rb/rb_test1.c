@@ -156,9 +156,6 @@ int main(int argc, char *argv[])
 	rb_free(rb);
 	rb_debug(rb);
 
-//	rb=NULL;
-//	int wrote=rb_write(rb,put,1);
-//	rb_debug(rb);
+	return 0;
 }//end main
-
 //EOF

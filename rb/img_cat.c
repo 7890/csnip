@@ -5,7 +5,7 @@
 
 
 rb_t *rb_=NULL;
-unsigned char *buf;
+char *buf;
 int bufsize=64000;
 int rb_arg_index=1;
 imgframe_t *img_null_header;
@@ -85,5 +85,7 @@ int size
 	close (file_fd);
 	free(buf);
 	//catch ctrl+c
+
+	return 0;
 }//end main
 //EOF

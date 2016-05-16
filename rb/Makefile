@@ -6,8 +6,7 @@ ARCH := $(shell getconf LONG_BIT)
 CFLAGS_32 := -D_32_BIT
 CFLAGS_64 := -D_64_BIT
 
-CFLAGS := $(CFLAGS_$(ARCH)) -O3
-#-Wall
+CFLAGS := $(CFLAGS_$(ARCH)) -O3 -Wall -Wno-unused-variable -Wno-unused-but-set-variable
 
 #CFLAGS ?= -lpthread -lrt -luuid
 #CFLAGS ?= -DRB_DISABLE_MLOCK -DRB_DISABLE_RW_MUTEX -DRB_DISABLE_SHM

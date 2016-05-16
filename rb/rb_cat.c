@@ -5,7 +5,7 @@
 #define RB_WRITE 2
 
 rb_t *rb_=NULL;
-unsigned char *buf;
+char *buf;
 int bufsize=64000;
 int mode=RB_READ;
 int rb_arg_index=1;
@@ -51,6 +51,7 @@ int main(int argc, char *argv[])
 		{
 			int count=rb_read(rb_,buf,bufsize);
 //			fprintf(stderr,"read %d bytes from ringbuffer\n",count);
+
 			int i=0;
 			for(;i<count;i++)
 			{
@@ -79,5 +80,7 @@ int main(int argc, char *argv[])
 	}
 	free(buf);
 	//catch ctrl+c
+
+	return 0;
 }//end main
 //EOF
