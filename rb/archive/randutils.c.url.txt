@@ -1,0 +1,4 @@
+https://github.com/cloudbase/libuuid/blob/master/randutils.c
+alexpilotti Adds MinGW compatibility
+
+Sun May 15 13:30:15 CEST 2016
