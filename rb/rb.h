@@ -75,7 +75,7 @@ extern "C" {
 static const char RB_MAGIC[8]={'r','i','n','g','b','u','f','\0'};
 /**< The first few bytes in a rb_t data block.*/
 
-static const float RB_VERSION=0.24;
+static const float RB_VERSION=0.25;
 /**< Version of rb.h. Changing the rb.h binary data layout can cause the loss of 
 interoperability with other programs using (including at compile time) a previous version of rb.h.*/
 
@@ -149,12 +149,8 @@ See also rb_new_shared_*() methods.*/
 	#include <sys/stat.h> //
 #endif
 
-#ifndef MIN
-	#define MIN(a,b) (((a)<(b))?(a):(b))
-#endif
-#ifndef MAX
-	#define MAX(a,b) (((a)>(b))?(a):(b))
-#endif
+static inline uint64_t rb_MIN(uint64_t a, uint64_t b) {return a<b ? a : b;}
+static inline uint64_t rb_MAX(uint64_t a, uint64_t b) {return a>b ? a : b;}
 
 static const char *bar_string="============================================================";
 /**< Used in method rb_debug_linearbar() to indicate buffer fill level.*/
@@ -398,24 +394,22 @@ static inline void rb_set_common_init_values(rb_t *rb)
 
 	rb->shm_handle[0]='\0';
 
-	rb->mutex_lockable=0;
-
-#ifndef RB_DISABLE_RW_MUTEX
+#ifndef RB_DISABLE_MLOCK
 	rb->memory_lockable=1;
 #else
 	rb->memory_lockable=0;
+#endif
+
+#ifndef RB_DISABLE_RW_MUTEX
+	rb->mutex_lockable=1;
+#else
+	rb->mutex_lockable=0;
 #endif
 
 #ifndef RB_DISABLE_SHM
 	rb->memory_shareable=1;
 #else
 	rb->memory_shareable=0;
-#endif
-
-#ifndef RB_DISABLE_SHM
-	rb->mutex_lockable=1;
-#else
-	rb->mutex_lockable=0;
 #endif
 
 #ifndef RB_DISABLE_RW_MUTEX
@@ -945,7 +939,7 @@ static inline uint64_t rb_generic_read(rb_t *rb, char *destination, uint64_t cou
 	{
 		can_read_count=rb_can_read(rb);
 		//limit to whole buffer
-		do_read_count=MIN(rb->size,count);
+		do_read_count=rb_MIN(rb->size,count);
 	}
 	else
 	{
@@ -1412,7 +1406,7 @@ static inline uint64_t rb_generic_advance_read_index(rb_t *rb, uint64_t count, i
 	{
 		can_read_count=rb_can_read(rb);
 		//limit to whole buffer
-		do_advance_count=MIN(rb->size,count);
+		do_advance_count=rb_MIN(rb->size,count);
 	}
 	else
 	{
