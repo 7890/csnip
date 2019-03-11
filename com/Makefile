@@ -10,7 +10,7 @@ clean:
 	-rm com
 
 install:
-	install -m755 com $(INSTALLDIR)/	
+	install -m755 com $(INSTALLDIR)/
 
 uninstall:
 	-rm $(INSTALLDIR)/com
