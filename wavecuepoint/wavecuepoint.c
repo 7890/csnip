@@ -677,7 +677,7 @@ int writeChunkLocationFromInputFileToOutputFile(ChunkLocation chunk, FILE *input
 			return -1;
 		}
 
-		if (fwrite(buffer, sizeof(char), 1024, outputFile) < 1)
+		if (fwrite(buffer, sizeof(char), 1024, outputFile) < 1024)
 		{
 			fprintf(stderr, "Copy chunk: Error writing output file");
 			fseek(inputFile, inputFileOrigLocation, SEEK_SET);
@@ -698,7 +698,7 @@ int writeChunkLocationFromInputFileToOutputFile(ChunkLocation chunk, FILE *input
 			return -1;
 		}
 
-		if (fwrite(buffer, sizeof(char), remainingBytesToWrite, outputFile) < 1)
+		if (fwrite(buffer, sizeof(char), remainingBytesToWrite, outputFile) < remainingBytesToWrite)
 		{
 			fprintf(stderr, "Copy chunk: Error writing output file");
 			fseek(inputFile, inputFileOrigLocation, SEEK_SET);
