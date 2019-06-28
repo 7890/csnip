@@ -4,7 +4,7 @@
 #include "vector.h"
 
 //return: initial capacity
-int vector_init(vector *v, int capacity)
+int vector_init(vector_t *v, int capacity)
 {
 	if(capacity<=0)
 	{
@@ -31,19 +31,19 @@ int vector_init(vector *v, int capacity)
 }
 
 //return: size
-int vector_size(vector *v)
+int vector_size(vector_t *v)
 {
 	return v->size;
 }
 
 //return: capacity
-int vector_capacity(vector *v)
+int vector_capacity(vector_t *v)
 {
 	return v->capacity;
 }
 
 //return: new capacity
-static int vector_resize(vector *v, int capacity)
+static int vector_resize(vector_t *v, int capacity)
 {
 	if(capacity<1){capacity=1;} //minimum
 	if(v->capacity==capacity){return v->capacity;}
@@ -63,7 +63,7 @@ static int vector_resize(vector *v, int capacity)
 }
 
 //return: new size
-int vector_add(vector *v, void *item)
+int vector_add(vector_t *v, void *item)
 {
 	if(v->capacity == v->size)
 	{
@@ -74,7 +74,7 @@ int vector_add(vector *v, void *item)
 }
 
 //return: size
-int vector_set(vector *v, int index, void *item)
+int vector_set(vector_t *v, int index, void *item)
 {
 	if(index >= 0 && index < v->size)
 	{
@@ -85,7 +85,7 @@ int vector_set(vector *v, int index, void *item)
 }
 
 //return: item
-void *vector_get(vector *v, int index)
+void *vector_get(vector_t *v, int index)
 {
 	if(index >= 0 && index < v->size)
 	{
@@ -95,7 +95,7 @@ void *vector_get(vector *v, int index)
 }
 
 //return new size
-int vector_delete(vector *v, int index)
+int vector_delete(vector_t *v, int index)
 {
 	if(index < 0 || index > v->size-1)
 	{
@@ -122,7 +122,7 @@ int vector_delete(vector *v, int index)
 }
 
 //return new size
-int vector_insert(vector *v, int index, void *item)
+int vector_insert(vector_t *v, int index, void *item)
 {
 	if(index < 0 || index > v->size-1)
 	{
@@ -145,7 +145,7 @@ int vector_insert(vector *v, int index, void *item)
 	return v->size;
 }
 
-int vector_clear(vector *v)
+int vector_clear(vector_t *v)
 {
 	int i;
 	int size=v->size;
@@ -157,7 +157,7 @@ int vector_clear(vector *v)
 	return vector_resize(v, v->initial_capacity);	
 }
 
-void vector_free(vector *v)
+void vector_free(vector_t *v)
 {
 	free(v->items);
 }

@@ -3,7 +3,7 @@
 
 #define VECTOR_INIT_CAPACITY 4
 
-#define VEC_NEW(vec, init_capacity) vector vec; vector_init(&vec, init_capacity)
+#define VEC_NEW(vec, init_capacity) vector_t vec; vector_init(&vec, init_capacity)
 #define VEC_ADD(vec, item) vector_add(&vec, (void *) item)
 #define VEC_SET(vec, index, item) vector_set(&vec, index, (void *) item)
 #define VEC_GET(vec, type, index) (type) vector_get(&vec, index)
@@ -15,25 +15,24 @@
 #define VEC_CLEAR(vec) vector_clear(&vec)
 #define VEC_FREE(vec) vector_free(&vec)
 
-typedef struct vector
+typedef struct
 {
 	void **items;
 	int initial_capacity;
 	int capacity;
 	int size;
-} vector;
+} vector_t;
 
-int vector_init(vector *, int);
-int vector_size(vector *);
-int vector_capacity(vector *);
-static int vector_resize(vector *, int);
-int vector_add(vector *, void *);
-int vector_set(vector *, int, void *);
-void *vector_get(vector *, int);
-int vector_delete(vector *, int);
-int vector_insert(vector *v, int index, void *);
-int vector_clear(vector *);
-void vector_free(vector *);
+int vector_init(vector_t *, int);
+int vector_size(vector_t *);
+int vector_capacity(vector_t *);
+int vector_add(vector_t *, void *);
+int vector_set(vector_t *, int, void *);
+void *vector_get(vector_t *, int);
+int vector_delete(vector_t *, int);
+int vector_insert(vector_t *v, int index, void *);
+int vector_clear(vector_t *);
+void vector_free(vector_t *);
 
 #endif //_VECTOR_H_
 //EOF
