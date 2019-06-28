@@ -3,16 +3,17 @@
 
 #define VECTOR_INIT_CAPACITY 4
 
-#define VECTOR_INIT(vec, init_capacity) vector vec; vector_init(&vec, init_capacity)
-#define VECTOR_ADD(vec, item) vector_add(&vec, (void *) item)
-#define VECTOR_SET(vec, index, item) vector_set(&vec, index, (void *) item)
-#define VECTOR_GET(vec, type, index) (type) vector_get(&vec, index)
-#define VECTOR_DELETE(vec, index) vector_delete(&vec, index)
-#define VECTOR_INSERT(vec, index, item) vector_insert(&vec, index, (void *) item)
-#define VECTOR_SIZE(vec) vector_size(&vec)
-#define VECTOR_CAPACITY(vec) vector_capacity(&vec)
-#define VECTOR_CLEAR(vec) vector_clear(&vec)
-#define VECTOR_FREE(vec) vector_free(&vec)
+#define VEC_NEW(vec, init_capacity) vector vec; vector_init(&vec, init_capacity)
+#define VEC_ADD(vec, item) vector_add(&vec, (void *) item)
+#define VEC_SET(vec, index, item) vector_set(&vec, index, (void *) item)
+#define VEC_GET(vec, type, index) (type) vector_get(&vec, index)
+#define VEC_DEL(vec, index) vector_delete(&vec, index)
+#define VEC_INS(vec, index, item) vector_insert(&vec, index, (void *) item)
+
+#define VEC_SIZE(vec) vector_size(&vec)
+#define VEC_CAPACITY(vec) vector_capacity(&vec)
+#define VEC_CLEAR(vec) vector_clear(&vec)
+#define VEC_FREE(vec) vector_free(&vec)
 
 typedef struct vector
 {

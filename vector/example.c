@@ -7,78 +7,97 @@
 int main(void)
 {
 	//initial capacity=5
-	VECTOR_INIT(v5, 5);
+	VEC_NEW(v5, 5);
 
-	assert(VECTOR_SIZE(v5)==0);
-	assert(VECTOR_CAPACITY(v5)==5);
+	assert(VEC_SIZE(v5)==0);
+	assert(VEC_CAPACITY(v5)==5);
 
 	//default initial capacity
-	VECTOR_INIT(v, 0);
-	assert(VECTOR_SIZE(v)==0);
-	assert(VECTOR_CAPACITY(v)==VECTOR_INIT_CAPACITY);
+	VEC_NEW(v, 0);
+	assert(VEC_SIZE(v)==0);
+	assert(VEC_CAPACITY(v)==VECTOR_INIT_CAPACITY);
 
-	VECTOR_ADD(v, "A");
-	VECTOR_ADD(v, "B");
-	VECTOR_ADD(v, "C");
-	VECTOR_ADD(v, "D");
+	VEC_ADD(v, "A");
+	VEC_ADD(v, "B");
+	VEC_ADD(v, "C");
+	VEC_ADD(v, "D");
+	assert(VEC_SIZE(v)==4);
+	assert(VEC_CAPACITY(v)==4);
 
-	assert(VECTOR_SIZE(v)==4);
-	assert(VECTOR_CAPACITY(v)==4);
-
-	VECTOR_ADD(v, "E");
-
-	assert(VECTOR_SIZE(v)==5);
-	assert(VECTOR_CAPACITY(v)==8); //after resize
+	VEC_ADD(v, "E");
+	assert(VEC_SIZE(v)==5);
+	assert(VEC_CAPACITY(v)==8); //after resize
 	//content: ABCDE
 
+	VEC_DEL(v, 0);
+	assert(VEC_SIZE(v)==4);
+	assert(VEC_CAPACITY(v)==8);
+	//content: BCDE
+
+	VEC_DEL(v, 0);
+	assert(VEC_SIZE(v)==3);
+	assert(VEC_CAPACITY(v)==8);
+	//content: CDE
+
+	VEC_DEL(v, 0);
+	assert(VEC_SIZE(v)==2);
+	assert(VEC_CAPACITY(v)==4); //after resize
+	//content: DE
+
 	int i;
+	for(i=0;i<7;i++)
+	{
+		VEC_ADD(v, "C"); //append
+	}
+	assert(VEC_SIZE(v)==9);
+	assert(VEC_CAPACITY(v)==16); //after resize
+	//content: DECCCCCCC
+
 	for(i=0;i<4;i++)
 	{
-		VECTOR_ADD(v, "C"); //append
+		VEC_INS(v, 0, "X"); //prepend
 	}
-	assert(VECTOR_SIZE(v)==9);
-	assert(VECTOR_CAPACITY(v)==16); //after resize
-	//content: ABCDECCCC
+	assert(VEC_SIZE(v)==13);
+	assert(VEC_CAPACITY(v)==16);
+	//content: XXXXDECCCCCCC
 
-	for(i=0;i<4;i++)
-	{
-		VECTOR_INSERT(v, 0, "X"); //prepend
-	}
-	assert(VECTOR_SIZE(v)==13);
-	assert(VECTOR_CAPACITY(v)==16);
-	//content: XXXXABCDECCCC
+	assert(VEC_CLEAR(v5)==5);
+	assert(VEC_SIZE(v)==13); //independent v
 
-	VECTOR_SET(v, 1, "Y"); //replace
+	VEC_SET(v, 1, "Y"); //replace
+	assert(VEC_SIZE(v)==13);
+	assert(VEC_CAPACITY(v)==16);
+	//content: XYXXDECCCCCCC
 
-	assert(VECTOR_SIZE(v)==13);
-	assert(VECTOR_CAPACITY(v)==16);
-	//content: XYXXABCDECCCC
-
-	VECTOR_DELETE(v, 4); //remove
-	assert(VECTOR_SIZE(v)==12);
-	assert(VECTOR_CAPACITY(v)==16);
-	//content: XYXXBCDECCCC
+	VEC_DEL(v, 4); //remove
+	assert(VEC_SIZE(v)==12);
+	assert(VEC_CAPACITY(v)==16);
+	//content: XYXXECCCCCCC
 
 	//print
-	for (i = 0; i < VECTOR_SIZE(v); i++)
+	for (i = 0; i < VEC_SIZE(v); i++)
 	{
-		printf("%s ", VECTOR_GET(v, char*, i));
+		printf("%s ", VEC_GET(v, char*, i));
 	}
 	printf("\n");
 
-	printf("X Y X X B C D E C C C C\n");
+	printf("X Y X X E C C C C C C C\n");
 
 	//try out of bounds
-	assert(VECTOR_SET(v, -1, "N")==-1);
-	assert(VECTOR_SET(v, VECTOR_SIZE(v), "N")==-1);
+	assert(VEC_SET(v, -1, "N")==-1);
+	assert(VEC_SET(v, VEC_SIZE(v), "N")==-1);
+	assert(VEC_DEL(v, -1)==-1);
+	assert(VEC_DEL(v, VEC_SIZE(v))==-1);
 
-	VECTOR_CLEAR(v);
+	VEC_CLEAR(v);
+	assert(VEC_SIZE(v)==0);
+	assert(VEC_CAPACITY(v)==VECTOR_INIT_CAPACITY); //after resize
 
-	assert(VECTOR_SIZE(v)==0);
-	assert(VECTOR_CAPACITY(v)==VECTOR_INIT_CAPACITY); //after resize
+	VEC_CLEAR(v5);
+	assert(VEC_SIZE(v5)==0);
+	assert(VEC_CAPACITY(v5)==5);
 
-	VECTOR_CLEAR(v5);
-	assert(VECTOR_SIZE(v5)==0);
-	assert(VECTOR_CAPACITY(v5)==5);
+	VEC_FREE(v);
+	VEC_FREE(v5);
 }
 //EOF
