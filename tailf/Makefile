@@ -1,11 +1,11 @@
-
-INSTALLDIR=/usr/local/bin
-CC=cc
+CC ?= cc
+INSTALLDIR ?= /usr/local/bin
+FLAGS ?= -Wall -O2
 
 default: tailf
 
 tailf:	tailf.c
-	$(CC) -Wall -O2 -o tailf tailf.c
+	$(CC) $(FLAGS) -o tailf tailf.c
 
 clean:
 	-rm tailf
